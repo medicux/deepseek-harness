@@ -121,7 +121,19 @@ export class SettingsScopeController<T> implements SettingsScope<T> {
     return this.write({ op: 'unset', path: [field] })
   }
 
+  setMany(ops: ReadonlyArray<{ field: string; clear: true } | { field: string; value: unknown }>): Promise<void> {
+    const pathOps = ops.map((entry): SettingsPathOpView => 'clear' in entry
+      ? { op: 'unset', path: [entry.field] }
+      : { op: 'set', path: [entry.field], value: entry.value })
+    return this.writeAll(pathOps)
+  }
+
   private write(op: SettingsPathOpView): Promise<void> {
+    return this.writeAll([op])
+  }
+
+  /** One generation owns the whole batch: it lands or recovers as a unit. */
+  private writeAll(ops: SettingsPathOpView[]): Promise<void> {
     const generation = ++this.writeGeneration
     return this.enqueue(async () => {
       const revision = this.pendingRevision ?? this.getSnapshot().revision
@@ -129,7 +141,7 @@ export class SettingsScopeController<T> implements SettingsScope<T> {
       try {
         response = await this.api.settings.mutate({
           ns: this.spec.namespace,
-          ops: [op],
+          ops,
           ...(revision === undefined ? {} : { expectedRevision: revision }),
         })
       } catch (_settingsWriteFailure) {

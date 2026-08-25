@@ -175,6 +175,42 @@ describe('SettingsScopeController', () => {
     })
   })
 
+  it('batches a setMany into one mutation carrying every op and revision', async () => {
+    const mutate = vi.fn().mockResolvedValue(ok(view({ preference: 'light', density: 'compact' }, 7)))
+    const { mirror, scope } = derivedScope({ describe: vi.fn().mockResolvedValue(described({ preference: 'system' }, 4)), mutate })
+    const published = trackValues(scope)
+    await mirror.load()
+
+    await scope.setMany([
+      { field: 'preference', value: 'light' },
+      { field: 'density', clear: true },
+    ])
+    expect(mutate).toHaveBeenCalledOnce()
+    expect(mutate).toHaveBeenCalledWith({
+      ns: 'ui-test',
+      ops: [
+        { op: 'set', path: ['preference'], value: 'light' },
+        { op: 'unset', path: ['density'] },
+      ],
+      expectedRevision: 4,
+    })
+    expect(scope.getSnapshot()).toMatchObject({ value: { preference: 'light', density: 'compact' }, revision: 7 })
+    expect(published.at(-1)).toEqual({ preference: 'light', density: 'compact' })
+  })
+
+  it('recovers from Host state when a batched mutation is refused', async () => {
+    const mutate = vi.fn().mockResolvedValue({ result: { ok: false, error: 'refused' } })
+    const describedCall = described({ preference: 'system' }, 4)
+    const describeCall = vi.fn().mockResolvedValueOnce(describedCall).mockResolvedValueOnce(describedCall)
+    const { mirror, scope } = derivedScope({ describe: describeCall, mutate })
+    await mirror.load()
+
+    await scope.setMany([{ field: 'preference', value: 'dark' }])
+    // The refused batch triggers a recovery read instead of publishing.
+    expect(scope.getSnapshot()).toMatchObject({ value: { preference: 'system' }, revision: 4 })
+    expect(mutate).toHaveBeenCalledOnce()
+  })
+
   it('folds the latest write answer into the mirror so a sibling scope sees it', async () => {
     const describeCall = vi.fn().mockResolvedValueOnce(described({ preference: 'system' }, 4))
     const mutate = vi.fn().mockResolvedValueOnce(ok(view({ preference: 'dark' }, 5)))

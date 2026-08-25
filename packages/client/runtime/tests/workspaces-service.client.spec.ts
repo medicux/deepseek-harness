@@ -328,6 +328,37 @@ describe('WorkspaceRuntime', () => {
     await expect(workspaces.pickDirectory()).rejects.toThrow(/no chooser/)
   })
 
+  it('answers from the desktop shell seat when the bridge carries a picker', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const sessions = new SessionRuntime(ctx, api, fakeRemote())
+    const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+    // The seat guard requires the two transport members; the picker is optional.
+    const calls: string[] = []
+    vi.stubGlobal('__DSH_IPC_CARRIER__', {
+      fetch: () => Promise.resolve({ status: 200, body: '{}' }),
+      openStream: () => { throw new Error('not under test') },
+      pickDirectory: () => Promise.resolve('/Users/me/Projects/demo'),
+    })
+    try {
+      api.onPickDirectory = () => {
+        calls.push('rpc')
+        return Promise.resolve(ok({ path: '/w/alpha' }))
+      }
+      await expect(workspaces.pickDirectory()).resolves.toBe('/Users/me/Projects/demo')
+      expect(calls).toEqual([])
+      // A shell without the optional member falls back to the Host RPC.
+      vi.stubGlobal('__DSH_IPC_CARRIER__', {
+        fetch: () => Promise.resolve({ status: 200, body: '{}' }),
+        openStream: () => { throw new Error('not under test') },
+      })
+      await expect(workspaces.pickDirectory()).resolves.toBe('/w/alpha')
+      expect(calls).toEqual(['rpc'])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('passes listings and creation through the browse wire, wrapping business failures', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()

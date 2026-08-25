@@ -6,7 +6,7 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SecretField, ValueField } from '../src/client/fields.tsx'
+import { SecretField, SelectField, ValueField } from '../src/client/fields.tsx'
 
 afterEach(cleanup)
 
@@ -152,5 +152,38 @@ describe('SecretField', () => {
     )
 
     expect(screen.getByLabelText('API key')).toHaveProperty('disabled', true)
+  })
+})
+
+describe('SelectField', () => {
+  const options = [
+    { value: 'deepseek', label: 'DeepSeek' },
+    { value: 'exa', label: 'Exa' },
+  ]
+
+  it('stages the chosen option without writing', () => {
+    const onEdit = vi.fn()
+    render(<SelectField {...frame} text="deepseek" options={options} onEdit={onEdit} onReset={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText('Command timeout'), { target: { value: 'exa' } })
+
+    expect(onEdit).toHaveBeenCalledWith('exa')
+    expect(screen.getByRole('option', { name: 'DeepSeek' })).toBeTruthy()
+  })
+
+  it('marks an invalid draft and replaces the hint with the reason', () => {
+    render(<SelectField {...frame} invalid text="" options={options} onEdit={vi.fn()} onReset={vi.fn()} />)
+
+    expect(screen.getByText('Enter a number.')).toBeTruthy()
+    expect(screen.queryByText('How long one command may run.')).toBeNull()
+  })
+
+  it('keeps the hint while the draft is valid and offers the reset when overridden', () => {
+    const onReset = vi.fn()
+    render(<SelectField {...frame} overridden text="exa" options={options} onEdit={vi.fn()} onReset={onReset} />)
+
+    expect(screen.getByText('How long one command may run.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to default' }))
+    expect(onReset).toHaveBeenCalledOnce()
   })
 })

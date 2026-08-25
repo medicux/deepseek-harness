@@ -353,11 +353,15 @@ describe('WebSearchCard', () => {
   function renderWebSearch(state: Partial<WebSearchCardState> = {}) {
     const store = createSnapshotStore<WebSearchCardState>({
       ...settled,
+      provider: field('deepseek'),
       baseURL: field(''),
+      model: field(''),
       maxUses: field('5'),
+      keyVisible: true,
       apiKey: field(''),
       apiKeyConfigured: false,
       apiKeyWritable: true,
+      clearedBySwitch: [],
       ...state,
     })
     const actions = cardActions()
@@ -365,6 +369,67 @@ describe('WebSearchCard', () => {
     render(<WebSearchCard {...props} />)
     return actions
   }
+
+  it('stages a provider switch and hides the credential plane for the keyless backend', () => {
+    const actions = renderWebSearch({ provider: field('duckduckgo'), keyVisible: false })
+    fireEvent.click(screen.getByText(en.webSearchTitle))
+
+    expect(screen.queryByLabelText(en.webSearchApiKey)).toBeNull()
+    expect(screen.queryByLabelText(en.webSearchBaseUrl)).toBeNull()
+    expect(screen.queryByLabelText(en.webSearchMaxUses)).toBeNull()
+
+    fireEvent.change(screen.getByLabelText(en.webSearchProvider), { target: { value: 'exa' } })
+    expect(actions.edit).toHaveBeenCalledWith('provider', 'exa')
+  })
+
+  it('an inherited provider renders as the value a save would store', () => {
+    renderWebSearch({ provider: field('') })
+    fireEvent.click(screen.getByText(en.webSearchTitle))
+
+    const select = screen.getByLabelText(en.webSearchProvider) as HTMLSelectElement
+    expect(select.value).toBe('deepseek')
+  })
+
+  it('a provider-switch notice names the pre-cleared fields', () => {
+    renderWebSearch({ clearedBySwitch: ['model', 'maxUses'] })
+    fireEvent.click(screen.getByText(en.webSearchTitle))
+
+    expect(screen.getByText(`${en.webSearchSwitchCleared} ${en.webSearchModel}, ${en.webSearchMaxUses}`))
+      .toBeTruthy()
+  })
+
+  it('shows the model field for a model-mediated backend and stages its edit and reset', () => {
+    const actions = renderWebSearch({ provider: field('gemini'), model: field('gemini-2.5-flash', { overridden: true }) })
+    fireEvent.click(screen.getByText(en.webSearchTitle))
+
+    expect(screen.getByLabelText(en.webSearchModel)).toBeTruthy()
+    expect(screen.queryByLabelText(en.webSearchMaxUses)).toBeNull()
+
+    fireEvent.change(screen.getByLabelText(en.webSearchModel), { target: { value: 'gemini-2.5-pro' } })
+    expect(actions.edit).toHaveBeenCalledWith('model', 'gemini-2.5-pro')
+
+    // The overridden model is the only field offering a reset here.
+    fireEvent.click(screen.getByRole('button', { name: en.reset }))
+    expect(actions.resetField).toHaveBeenCalledWith('model')
+  })
+
+  it('falls back to the default backend when the staged provider is blank', () => {
+    renderWebSearch({ provider: field('') })
+    fireEvent.click(screen.getByText(en.webSearchTitle))
+
+    // The deepseek fallback is model-mediated and budgeted.
+    expect(screen.getByLabelText(en.webSearchModel)).toBeTruthy()
+    expect(screen.getByLabelText(en.webSearchMaxUses)).toBeTruthy()
+  })
+
+  it('stages resets for the provider choice itself', () => {
+    const actions = renderWebSearch({ provider: field('exa', { overridden: true }) })
+    fireEvent.click(screen.getByText(en.webSearchTitle))
+
+    fireEvent.click(screen.getByRole('button', { name: en.reset }))
+
+    expect(actions.resetField).toHaveBeenCalledWith('provider')
+  })
 
   it('reports whether a key is configured without ever showing one', () => {
     renderWebSearch({ apiKeyConfigured: true })

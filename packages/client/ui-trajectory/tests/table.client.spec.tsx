@@ -666,6 +666,63 @@ describe('TrajectoryTable', () => {
     })
   })
 
+  it('cancels the queued scroll reset when the ledger unmounts', async () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(600)
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+      configurable: true,
+      value: vi.fn(),
+    })
+    const cells = Array.from({ length: 300 }, (_, index) => ({
+      index: index + 1,
+      kind: 'context' as const,
+      text: `Context ${index + 1}`,
+      timeSeconds: 0,
+    }))
+    const turns: readonly TrajectoryTurnModel[] = [{
+      turn: 1,
+      groups: [{ title: 'Context', cells }],
+    }]
+    const view = render(<TrajectoryTable turns={turns} {...FOLD_PROPS} />)
+    await waitFor(() => {
+      expect(view.container.querySelector('tr[data-virtual-position]')).toBeTruthy()
+    })
+
+    // The virtualizer schedules its offset-reset debounce through the ambient
+    // host, which the vitest jsdom lane resolves to the plain Node global, so
+    // a debounce left queued at teardown fires into deleted browser globals.
+    // Track every timer scheduled from the scroll event onward and require the
+    // unmount to cancel all of them.
+    type TimerId = ReturnType<typeof setTimeout>
+    const tracked = new Set<TimerId>()
+    const originalSetTimeout = globalThis.setTimeout.bind(globalThis) as
+      (handler: () => void, delay: number | undefined) => TimerId
+    const originalClearTimeout = globalThis.clearTimeout.bind(globalThis) as
+      (id: TimerId | undefined) => void
+    vi.stubGlobal('setTimeout', (handler: () => void, delay: number | undefined): TimerId => {
+      const id = originalSetTimeout(() => {
+        tracked.delete(id)
+        handler()
+      }, delay)
+      tracked.add(id)
+      return id
+    })
+    vi.stubGlobal('clearTimeout', (id: TimerId | undefined): void => {
+      if (id !== undefined) tracked.delete(id)
+      originalClearTimeout(id)
+    })
+    try {
+      const tablePane = screen.getByRole('table').parentElement as HTMLElement
+      tablePane.scrollTop = 500
+      fireEvent.scroll(tablePane)
+      expect(tracked.size).toBeGreaterThan(0)
+
+      cleanup()
+      expect(tracked.size).toBe(0)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('keeps running and failure semantics distinct from record roles', () => {
     const view = render(<TrajectoryTable turns={TURNS} {...FOLD_PROPS} />)
     expect(view.container.querySelector('tr[data-kind="tool"][data-running="true"]')).toBeTruthy()

@@ -101,19 +101,34 @@ interface PlannedWrite {
   /** Field this entry writes. */
   field: string
   /**
-   * Perform the write and report whether the Host holds the staged value
-   * afterwards; undefined when the draft is not a value the field accepts.
+   * The write a save performs; undefined when the draft is not a value the
+   * field accepts. Section fields carry set/clear and batch into one Host
+   * mutation; secrets write through their own domain.
    */
-  run: (() => Promise<boolean>) | undefined
+  write: ({ kind: 'set'; value: unknown } | { kind: 'clear' } | { kind: 'secret'; text: string }) | undefined
+}
+
+/** One section field op inside a batched mutation. */
+type SectionOp = { field: string; clear: true } | { field: string; value: unknown }
+
+/** Bounds a {@link numberField} accepts; violations stage as invalid text. */
+export interface NumberFieldBounds {
+  /** Smallest accepted value. */
+  min?: number
+  /** Largest accepted value. */
+  max?: number
+  /** Reject non-whole numbers when true. */
+  integer?: boolean
 }
 
 /**
  * A whole-number field. An empty draft clears the field; any other draft that
- * is not a finite number blocks the save.
+ * is not a finite number — or violates the given bounds — blocks the save.
  * @param field - field name inside the namespace section.
+ * @param bounds - optional bounds the parsed value must satisfy.
  * @returns the field's conversion spec.
  */
-export function numberField(field: string): CardFieldSpec {
+export function numberField(field: string, bounds: NumberFieldBounds = {}): CardFieldSpec {
   return {
     field,
     // A section that carries no number for this field renders empty rather
@@ -123,7 +138,11 @@ export function numberField(field: string): CardFieldSpec {
       const trimmed = text.trim()
       if (trimmed === '') return { kind: 'clear' }
       const parsed = Number(trimmed)
-      return Number.isFinite(parsed) ? { kind: 'set', value: parsed } : undefined
+      if (!Number.isFinite(parsed)) return undefined
+      if (bounds.integer === true && !Number.isInteger(parsed)) return undefined
+      if (bounds.min !== undefined && parsed < bounds.min) return undefined
+      if (bounds.max !== undefined && parsed > bounds.max) return undefined
+      return { kind: 'set', value: parsed }
     },
   }
 }
@@ -141,6 +160,26 @@ export function textField(field: string): CardFieldSpec {
     parse: (text) => {
       const trimmed = text.trim()
       return trimmed === '' ? { kind: 'clear' } : { kind: 'set', value: trimmed }
+    },
+  }
+}
+
+/**
+ * An enum field rendered as a fixed option list. Only the listed values stage;
+ * an empty draft clears the field so saving hands the choice back to the
+ * composition layer.
+ * @param field - field name inside the namespace section.
+ * @param allowed - the values this field accepts.
+ * @returns the field's conversion spec.
+ */
+export function selectField(field: string, allowed: readonly string[]): CardFieldSpec {
+  return {
+    field,
+    format: value => typeof value === 'string' && allowed.includes(value) ? value : '',
+    parse: (text) => {
+      const trimmed = text.trim()
+      if (trimmed === '') return { kind: 'clear' }
+      return allowed.includes(trimmed) ? { kind: 'set', value: trimmed } : undefined
     },
   }
 }
@@ -197,7 +236,7 @@ export class CardForm<T> {
       available: snapshot.status === 'ready',
       writable: snapshot.writable,
       dirty: plan.length > 0,
-      invalid: plan.some(item => item.run === undefined),
+      invalid: plan.some(item => item.write === undefined),
       saving: this.saving,
       failed: this.failed,
     }
@@ -256,19 +295,54 @@ export class CardForm<T> {
    */
   async save(): Promise<void> {
     const plan = this.plan()
-    const writes = plan.flatMap(item => item.run === undefined ? [] : [item.run])
-    if (plan.length === 0 || this.saving || writes.length !== plan.length) return
+    if (plan.length === 0 || this.saving || plan.some(item => item.write === undefined)) return
     this.saving = true
     this.failed = false
     this.publish()
+    const sectionOps = plan.flatMap((item): Array<PlannedWrite & { write: { kind: 'set'; value: unknown } | { kind: 'clear' } }> =>
+      item.write !== undefined && item.write.kind !== 'secret' ? [item as never] : [])
+    const secretOps = plan.filter((item): item is PlannedWrite & { write: { kind: 'secret'; text: string } } =>
+      item.write?.kind === 'secret')
     let landed = true
-    for (const write of writes) {
-      landed = await write() && landed
+    const firstSection = sectionOps[0]
+    if (firstSection !== undefined && sectionOps.length === 1) {
+      landed = await this.perform(firstSection)
+    } else if (sectionOps.length > 1) {
+      // One durable mutation: the Host validates the composed result once, so
+      // a multi-field save cannot half-apply behind a refused op.
+      await this.scope.setMany(sectionOps.map((item): SectionOp => {
+        const write = item.write
+        return write.kind === 'clear' ? { field: item.field, clear: true } : { field: item.field, value: write.value }
+      }))
+      const user = this.userLayer()
+      for (const item of sectionOps) {
+        const write = item.write
+        const held = write.kind === 'clear'
+          ? !(user !== undefined && Object.hasOwn(user, item.field))
+          : user?.[item.field] === write.value
+        landed = held && landed
+      }
+    }
+    for (const item of secretOps) {
+      const secret = this.secretSpecs.get(item.field)
+      if (secret === undefined) throw new Error(`plugin card has no secret control ${item.field}`)
+      landed = await secret.write(item.write.text) && landed
     }
     if (landed) this.staged.clear()
     this.saving = false
     this.failed = !landed
     this.publish()
+  }
+
+  /** Run one single-field section write and read back whether the Host holds it. */
+  private async perform(item: PlannedWrite & { write: { kind: 'set'; value: unknown } | { kind: 'clear' } }): Promise<boolean> {
+    const write = item.write
+    if (write.kind === 'clear') {
+      await this.scope.unset(item.field)
+      return !this.stored(item.field)
+    }
+    await this.scope.set(item.field, write.value)
+    return this.userLayer()?.[item.field] === write.value
   }
 
   /**
@@ -283,31 +357,21 @@ export class CardForm<T> {
       const secret = this.secretSpecs.get(field)
       if (secret !== undefined) {
         const value = staged.text.trim()
-        if (value !== '') plan.push({ field, run: () => secret.write(value) })
+        if (value !== '') plan.push({ field, write: { kind: 'secret', text: value } })
         continue
       }
       const spec = this.spec(field)
       if (staged.clear) {
-        if (this.stored(field)) plan.push({ field, run: () => this.clear(field) })
+        if (this.stored(field)) plan.push({ field, write: { kind: 'clear' } })
         continue
       }
       if (staged.text === spec.format(this.sectionValue(field))) continue
       const write = spec.parse(staged.text)
-      if (write === undefined) plan.push({ field, run: undefined })
-      else if (write.kind === 'clear') plan.push({ field, run: () => this.clear(field) })
-      else plan.push({ field, run: () => this.store(field, write.value) })
+      if (write === undefined) plan.push({ field, write: undefined })
+      else if (write.kind === 'clear') plan.push({ field, write: { kind: 'clear' } })
+      else plan.push({ field, write: { kind: 'set', value: write.value } })
     }
     return plan
-  }
-
-  private async clear(field: string): Promise<boolean> {
-    await this.scope.unset(field)
-    return !this.stored(field)
-  }
-
-  private async store(field: string, value: unknown): Promise<boolean> {
-    await this.scope.set(field, value)
-    return this.userLayer()?.[field] === value
   }
 
   private stage(field: string, edit: StagedEdit): void {
