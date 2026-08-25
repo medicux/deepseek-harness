@@ -86,8 +86,10 @@
     "apps/web/tests/complex-history.perf.ts",
     "apps/web/tests/pwsh-terminal.e2e.ts",
     "apps/web/tests/workflow-run.e2e.ts",
+    "apps/web/tests/workbench-terminal.e2e.ts",
     "apps/web/stress-tests/reasoning-chunks.stress.ts",
     "apps/cli/tests/**/*.ts",
+    "apps/desktop/tests/**/*.ts",
     "examples/*/src/**/*.ts",
     "examples/*/start.ts",
     "examples/*/tests/**/*.ts",
@@ -236,9 +238,7 @@
     { "path": "./packages/compaction/command-compact" },
     { "path": "./packages/compaction/compaction-tool-result-pruner" },
     { "path": "./packages/web/web" },
-    { "path": "./packages/web/web-search-exa" },
-    { "path": "./packages/web/web-search-perplexity" },
-    { "path": "./packages/web/web-search-deepseek" },
+    { "path": "./packages/web/web-search" },
     { "path": "./packages/web/web-fetch-http" },
     { "path": "./packages/web/tool-web" },
     { "path": "./packages/spill/spill" },
@@ -299,12 +299,14 @@
     { "path": "./packages/host/directory-picker-native" },
     { "path": "./packages/host/frontend-static" },
     { "path": "./packages/host/plugin-inventory" },
+    { "path": "./packages/host/terminal-gateway" },
     { "path": "./packages/host/webserver" },
     { "path": "./packages/sdk/client" },
     { "path": "./packages/sdk/protocol" },
     { "path": "./packages/lsp/lsp" },
     { "path": "./packages/lsp/lsp-stdio" },
     { "path": "./packages/lsp/tool-lsp" },
-    { "path": "./apps/cli" }
+    { "path": "./apps/cli" },
+    { "path": "./apps/desktop" }
   ]
 }

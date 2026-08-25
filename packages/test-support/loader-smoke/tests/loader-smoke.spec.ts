@@ -3,7 +3,12 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { LOADER_SMOKE_TEST_TIMEOUT_MS, runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
+import {
+  LOADER_SMOKE_TEST_TIMEOUT_MS,
+  resolveSmokeProcessTimeoutMs,
+  runLoaderSmoke,
+  SMOKE_PROCESS_TIMEOUT_ENV,
+} from '@deepseek-ai/dsh-loader-smoke'
 
 const configPath = '/tmp/fixture.cordis.yml'
 const tsconfigPath = fileURLToPath(new URL('../../../../tsconfig.json', import.meta.url))
@@ -113,5 +118,23 @@ describe('runLoaderSmoke', () => {
       tsconfigPath,
       processTimeoutMs: 100,
     })).rejects.toThrow('hanging fixture did not exit within 0.1s.')
+  })
+})
+
+describe('resolveSmokeProcessTimeoutMs', () => {
+  it('defaults to the measured battery headroom and accepts a validated override', () => {
+    expect(resolveSmokeProcessTimeoutMs(undefined)).toBe(60_000)
+    expect(resolveSmokeProcessTimeoutMs('')).toBe(60_000)
+    expect(resolveSmokeProcessTimeoutMs('90000')).toBe(90_000)
+  })
+
+  it('rejects a malformed override instead of silently keeping the default', () => {
+    expect(() => resolveSmokeProcessTimeoutMs('fast')).toThrow(
+      `${SMOKE_PROCESS_TIMEOUT_ENV} must be a positive integer, got "fast".`,
+    )
+    // Numeric separators parse in literals, not in strings.
+    expect(() => resolveSmokeProcessTimeoutMs('90_000')).toThrow(
+      `${SMOKE_PROCESS_TIMEOUT_ENV} must be a positive integer, got "90_000".`,
+    )
   })
 })

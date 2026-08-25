@@ -53,6 +53,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/code-runtime/code-runtime-worker-thread': { kind: 'indirect', reason: 'The worker backend delegates model rendering to Code Mode in dsh-tools.' },
   'packages/code-runtime/code-runtime-python': { kind: 'indirect', reason: 'The CPython subprocess backend delegates model rendering to Code Mode in dsh-tools.' },
   'packages/client/ui-agent-preset': { kind: 'indirect', reason: 'Browser-side settings row; the preset it selects owns every model-facing effect.' },
+  'packages/client/ui-terminal': { kind: 'none', reason: 'Browser terminal view only; keystrokes and output ride the gateway routes and no model request exists on this surface.' },
   'packages/core/agent-default-model': { kind: 'indirect', reason: 'The service supplies a ModelSelection; request assembly and adapters own the model-visible request.' },
   'packages/preset/agent-presets': { kind: 'indirect', reason: 'The mount installs a preset\'s own plugins, which own every model-facing registration it makes visible.' },
   'packages/typert/registry': { kind: 'none', reason: 'Runtime type registry; consumers (cordis_inspect, wire faces, gates) own any model-visible projection of registry contents.' },
@@ -109,6 +110,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/host/directory-picker-browse': { kind: 'none', reason: 'The GUI-host picking backend registers nothing model-facing.' },
   'packages/host/directory-picker-native': { kind: 'none', reason: 'The GUI-host picking backend registers nothing model-facing.' },
   'packages/host/webserver': { kind: 'none', reason: 'The HTTP carrier bridges browser and API handler and registers nothing model-facing.' },
+  'packages/host/terminal-gateway': { kind: 'none', reason: 'PTY session host behind HTTP routes; the shell it spawns is user-owned and never assembles a provider request.' },
   'packages/host/frontend-static': { kind: 'none', reason: 'The SPA dist server answers browser asset requests and registers nothing model-facing.' },
   'packages/host/plugin-inventory': { kind: 'none', reason: 'Host-side read-only Loader projection; registers nothing model-facing.' },
   'packages/bundle/base': { kind: 'indirect', reason: 'The bundle is a patch-list carrier; each inserted row\'s package owns its model-facing behavior.' },
@@ -164,7 +166,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/util/native-command': { kind: 'none', reason: 'The host-side subprocess runner registers nothing model-facing.' },
   'packages/web/web': { kind: 'indirect', reason: 'The provider registry delegates model rendering to dsh-tool-web.' },
   'packages/web/web-fetch-http': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
-  'packages/web/web-search-exa': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
+  'packages/web/web-search': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
   'packages/workflow/workflow': { kind: 'indirect', reason: 'The service delegates parent and child model rendering to its consumer and engine.' },
 }
 

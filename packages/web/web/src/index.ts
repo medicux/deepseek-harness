@@ -21,6 +21,16 @@ import { WebError } from './types.ts'
 export {
   WebError,
 } from './types.ts'
+export {
+  isAbortError,
+  resolveProviderKey,
+  resolveProviderKeyOptions,
+  searchAborted,
+  throwProviderHttpError,
+} from './provider-support.ts'
+export type {
+  ProviderKeyOptions,
+} from './provider-support.ts'
 export type {
   WebFetchBody,
   WebFetchProvider,
@@ -174,7 +184,10 @@ function resolveProvider<P extends ResolvableProvider>(selection: Selection<P>):
   if (configuredId !== undefined) {
     const provider = providers.get(configuredId)
     if (!provider) {
-      throw new WebError(`configured web provider "${configuredId}" is not registered`, 'WEB_PROVIDER_CONFIGURED_MISSING')
+      // The pre-plugin settings wrote the search route as `deepseek-official`;
+      // name today's id so a stale section tells the user how to migrate.
+      const hint = configuredId === 'deepseek-official' ? '; the id is now "deepseek"' : ''
+      throw new WebError(`configured web provider "${configuredId}" is not registered${hint}`, 'WEB_PROVIDER_CONFIGURED_MISSING')
     }
     if (!provider.available()) {
       throw new WebError(`configured web provider "${configuredId}" is registered but unavailable`, 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE')

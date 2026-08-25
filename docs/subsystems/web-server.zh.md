@@ -2,7 +2,7 @@
 
 [English](web-server.md) | 中文
 
-[dsh-host-webserver](../../packages/host/webserver) 是 GUI 宿主的浏览器 HTTP 载体：它是一个提供 `ctx.webServer` 的 `node:http` 插件，包含具名路由注册表、index.html 转换回调，以及一个可由插件认领的回退处理器。它不属于 agent loop（智能体循环），也不是能力 seam；它不了解任何 harness 概念。其他插件负责注册所有功能路由，包括 `/api` 桥接、插件 bundle 和 HMR（热模块替换）事件流（[分层说明](../../.agents/notes/implemented/architecture/2026-07-19-gui-layering-and-rpc-protocol.md)）。该服务器只服务浏览器：Electron 通过 `file://` 加载已构建文件，并经 IPC 桥接发送 fetch 请求，不使用本服务器。
+[dsh-host-webserver](../../packages/host/webserver) 是 GUI 宿主的浏览器 HTTP 载体：它是一个提供 `ctx.webServer` 的 `node:http` 插件，包含具名路由注册表、index.html 转换回调，以及一个可由插件认领的回退处理器。它不属于 agent loop（智能体循环），也不是能力 seam；它不了解任何 harness 概念。其他插件负责注册所有功能路由，包括 `/api` 桥接、插件 bundle 和 HMR（热模块替换）事件流（[分层说明](../../.agents/notes/implemented/architecture/2026-07-19-gui-layering-and-rpc-protocol.md)）。该服务器只服务浏览器：桌面壳通过特权 `dsh://app` 协议加载应用——主进程把这些请求转发到同一个分发——并让 API 流量经 IPC 桥接传输而非套接字（[桌面载体](../../packages/client/connection/src/client/desktop-carrier.ts)）。
 
 源码：[`packages/host/webserver/src/index.ts`](../../packages/host/webserver/src/index.ts)
 
@@ -29,16 +29,22 @@ interface WebRoute {
 ## 配置
 
 ```ts type-equiv
-/** Gateway config: the listen address. */
+/** Gateway config: the listen address and the delivery carrier. */
 interface Config {
-  /** Listen host; the two supported values are loopback and all-interfaces. */
+  /** Listen host; the two supported values are loopback and all-interfaces. TCP only. */
   host: '127.0.0.1' | '0.0.0.0'
-  /** Listen port; zero requests an OS-assigned port. */
+  /** Listen port; zero requests an OS-assigned port. TCP only. */
   port: number
+  /**
+   * Delivery carrier: `tcp` listens per host/port (the browser shape);
+   * `stdio` binds nothing — a supervisor drives the same dispatch through
+   * `serveStdio` over the child's pipes.
+   */
+  carrier: 'tcp' | 'stdio'
 }
 ```
 
-`host` 只接受 `127.0.0.1`（默认姿态）和 `0.0.0.0`（刻意的网络暴露）；没有 TLS、认证或 origin 策略，因此绑定到非回环地址会把服务器暴露给该网络。dist 位置是认领席位的前端插件的组装事实。
+`host` 只接受 `127.0.0.1`（默认姿态）和 `0.0.0.0`（刻意的网络暴露）；没有 TLS、认证或 origin 策略，因此绑定到非回环地址会把服务器暴露给该网络。dist 位置是认领席位的前端插件的组装事实。`carrier` 选择同一分发抵达客户端的方式：默认的 `tcp` 保留监听套接字，`stdio` 则把分发交给经由子进程管道驱动的监督者。
 
 ## 服务
 
@@ -96,6 +102,15 @@ registerFallback(handler: WebRoute['handler']): () => void
 tapIndex(transform: (html: string) => string): () => void
 
 /**
+ * Dispatch one request through the route tables and fallback seat. This is
+ * the transport-independent core: node:http and the stdio carrier both call
+ * it, so route owners see one request/response surface either way.
+ * @param req - incoming request (method, url, headers, body stream).
+ * @param res - response to own for the full lifecycle.
+ */
+async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void>
+
+/**
  * Run an index.html body through the registered taps in registration order
  * — called by the fallback owner on every index response it renders.
  * @param html - the raw index.html body.
@@ -104,5 +119,5 @@ tapIndex(transform: (html: string) => string): () => void
 applyIndexTaps(html: string): string
 ```
 
-Source: [`packages/host/webserver/src/index.ts:59`](../../packages/host/webserver/src/index.ts)
+Source: [`packages/host/webserver/src/index.ts:65`](../../packages/host/webserver/src/index.ts)
 <!-- END GENERATED cordis-surface -->

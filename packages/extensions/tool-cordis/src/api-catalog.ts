@@ -2195,6 +2195,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the disposer removing the transform.',
       },
       {
+        signature: 'async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void>',
+        description: 'Dispatch one request through the route tables and fallback seat. This is the transport-independent core: node:http and the stdio carrier both call it, so route owners see one request/response surface either way.',
+        parameters: [{ name: 'req', description: 'incoming request (method, url, headers, body stream).' }, { name: 'res', description: 'response to own for the full lifecycle.' }],
+      },
+      {
         signature: 'applyIndexTaps(html: string): string',
         description: 'Run an index.html body through the registered taps in registration order — called by the fallback owner on every index response it renders.',
         parameters: [{ name: 'html', description: 'the raw index.html body.' }],
@@ -4354,7 +4359,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SubprocessTerminalHandle',
-    declaration: 'export interface SubprocessTerminalHandle {\n    readonly pid: number;\n    readonly output: Readable;\n    readonly done: Promise<SubprocessOutcome>;\n    write(data: string): Promise<void>;\n    inspectForeground(): Promise<SubprocessTerminalForeground | undefined>;\n    signalForeground(signal: SubprocessTerminalSignal): Promise<number>;\n    terminate(): Promise<void>;\n}',
+    declaration: 'export interface SubprocessTerminalHandle {\n    readonly pid: number;\n    readonly output: Readable;\n    readonly done: Promise<SubprocessOutcome>;\n    write(data: string): Promise<void>;\n    resize(cols: number, rows: number): Promise<void>;\n    inspectForeground(): Promise<SubprocessTerminalForeground | undefined>;\n    signalForeground(signal: SubprocessTerminalSignal): Promise<number>;\n    terminate(): Promise<void>;\n}',
   },
   {
     name: 'SubprocessTerminalSignal',

@@ -5,7 +5,7 @@
  * Run: `tsx scripts/check-workspace-constraints.ts`.
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { hasTypertRemoteNavigation, isForbiddenPublicationFile } from './publication-payload.ts'
@@ -61,6 +61,9 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   // The Web build emits sourcemaps for browser debugging; publishing them is
   // what the payload policy forbids, so the bundle ships without them.
   '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],
+  // The desktop shell publishes its compiled main/preload entries; packaging
+  // into platform bundles happens from the published package, not the tree.
+  '@deepseek-ai/dsh-desktop': ['lib/*.js', 'lib/*.cjs', 'lib/types/**/*.d.ts'],
 }
 
 /** The subset of package.json fields this constraint check cares about. */
@@ -382,6 +385,38 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
 }
 
 /**
+ * Exact-key `paths` entries must target an existing entry file, never a
+ * directory. The vitest source plane rewrites bare specifiers through this map
+ * (vite-tsconfig-paths over tsconfig.base.json); a directory target can
+ * silently skip the rewrite, dropping the import onto the built `lib/` bundle
+ * whose inlined dependency copies split class identity across module graphs.
+ * A missing target fails the same way. See the paths-entry-file Agent Note.
+ */
+export function checkTsconfigPathsTargets(): string[] {
+  const raw = readFileSync(join(root, 'tsconfig.base.json'), 'utf8')
+    .split('\n')
+    .filter(line => !/^\s*\/\//u.test(line))
+    .join('\n')
+  const config = JSON.parse(raw) as { compilerOptions?: { paths?: Record<string, readonly string[]> } }
+  const paths = config.compilerOptions?.paths ?? {}
+  const errors: string[] = []
+  for (const [key, targets] of Object.entries(paths)) {
+    // Wildcard keys intentionally keep directory targets: their substitutions
+    // always name concrete files at the use site.
+    if (key.includes('*')) continue
+    for (const target of targets) {
+      const resolved = join(root, target)
+      if (!existsSync(resolved)) {
+        errors.push(`tsconfig.base.json paths["${key}"] → "${target}" does not exist; delete the dead entry or point it at the real entry file`)
+      } else if (statSync(resolved).isDirectory()) {
+        errors.push(`tsconfig.base.json paths["${key}"] → "${target}" is a directory; exact keys must target an entry file (e.g. "${target}/index.ts") so source-plane resolution stays deterministic`)
+      }
+    }
+  }
+  return errors
+}
+
+/**
  * Enforce `packages/<group>/<pkg>`: groups are open-named containers without a
  * package.json, and packages may be neither flat nor more deeply nested.
  */
@@ -479,6 +514,7 @@ export function main(): void {
     ...checkWorkspaceProtocol(manifests),
     ...checkExperimentalDependencyIsolation(dependencyManifests),
     ...checkHierarchyShape(),
+    ...checkTsconfigPathsTargets(),
     ...collectProjectReferenceFaceViolations(root),
   ]
   if (errors.length > 0) {

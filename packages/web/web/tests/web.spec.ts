@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import WebRuntime, {
   WebError,
+  resolveProviderKeyOptions,
   type WebFetchProvider,
   type WebFetchResult,
   type WebSearchProvider,
@@ -39,6 +40,23 @@ async function mountWeb(config: ConstructorParameters<typeof WebRuntime>[1] = {}
   await ctx.plugin(WebRuntime, config)
   return { ctx, web: ctx.web }
 }
+
+describe('resolveProviderKeyOptions ambient fallback', () => {
+  const input = (ambient: Record<string, string>) => ({
+    credentials: undefined,
+    ambientValues: { get: (name: string) => ambient[name] === undefined ? undefined : { value: ambient[name] } },
+    apiKeyEnv: 'TEST_KEY' as const,
+    literalApiKey: undefined,
+  })
+
+  it('resolves a non-empty ambient value and defers on an empty one', async () => {
+    const present = resolveProviderKeyOptions(input({ TEST_KEY: 'from-env' }))
+    await expect(present.resolveApiKey()).resolves.toBe('from-env')
+
+    const blank = resolveProviderKeyOptions(input({ TEST_KEY: '' }))
+    await expect(blank.resolveApiKey()).resolves.toBeUndefined()
+  })
+})
 
 describe('WebRuntime registration', () => {
   it('registers a search provider and unregisters it via the returned disposer', async () => {
@@ -91,6 +109,13 @@ describe('WebRuntime execution resolution', () => {
     const { web } = await mountWeb({ searchProvider: 'perplexity' })
     web.registerSearchProvider(makeSearchProvider('exa', available, () => Promise.resolve(searchResult('exa'))))
     await expect(web.search({ query: 'q' })).rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_CONFIGURED_MISSING' }))
+  })
+
+  it('names the migrated id when a legacy deepseek-official section misses', async () => {
+    const { web } = await mountWeb({ searchProvider: 'deepseek-official' })
+    web.registerSearchProvider(makeSearchProvider('exa', available, () => Promise.resolve(searchResult('exa'))))
+    // Pre-plugin sections wrote the search route as `deepseek-official`.
+    await expect(web.search({ query: 'q' })).rejects.toThrow(/is now "deepseek"/u)
   })
 
   it('throws WEB_PROVIDER_CONFIGURED_UNAVAILABLE for an unusable configured id', async () => {

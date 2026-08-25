@@ -512,12 +512,14 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
   'AsyncIterable',
   'Context',
   'Error',
+  'IncomingMessage',
   'Map',
   'Partial',
   'Pick',
   'Promise',
   'Record',
   'Readonly',
+  'ServerResponse',
   'Uint8Array',
 ])
 
