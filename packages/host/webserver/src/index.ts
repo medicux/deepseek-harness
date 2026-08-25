@@ -41,12 +41,18 @@ export interface WebUpgradeRoute {
   handler: (req: IncomingMessage, socket: Duplex, head: Buffer) => void | Promise<void>
 }
 
-/** Gateway config: the listen address. */
+/** Gateway config: the listen address and the delivery carrier. */
 export interface Config {
-  /** Listen host; the two supported values are loopback and all-interfaces. */
+  /** Listen host; the two supported values are loopback and all-interfaces. TCP only. */
   host: '127.0.0.1' | '0.0.0.0'
-  /** Listen port; zero requests an OS-assigned port. */
+  /** Listen port; zero requests an OS-assigned port. TCP only. */
   port: number
+  /**
+   * Delivery carrier: `tcp` listens per host/port (the browser shape);
+   * `stdio` binds nothing — a supervisor drives the same dispatch through
+   * `serveStdio` over the child's pipes.
+   */
+  carrier: 'tcp' | 'stdio'
 }
 
 /**
@@ -58,8 +64,9 @@ export interface Config {
  */
 export class WebServer extends Service {
   static Config: z<Config> = z.object({
-    host: z.union([z.const('127.0.0.1'), z.const('0.0.0.0')]).required(),
-    port: z.natural().max(65535).required(),
+    host: z.union([z.const('127.0.0.1'), z.const('0.0.0.0')]).default('127.0.0.1'),
+    port: z.natural().max(65535).default(0),
+    carrier: z.union([z.const('tcp'), z.const('stdio')]).default('tcp'),
   })
 
   private readonly exact = new Map<string, WebRoute>()
@@ -68,21 +75,32 @@ export class WebServer extends Service {
   private readonly upgradedSockets = new Set<Duplex>()
   private readonly indexTaps: ((html: string) => string)[] = []
   private fallback: WebRoute['handler'] | undefined
-  private server!: Server
-  private listenedPort!: number
+  private server?: Server
+  private listenedPort?: number
 
   constructor(ctx: Context, private config: Config) {
     super(ctx, 'webServer')
   }
 
-  /** The listening port (the OS-assigned value when config.port is 0). */
+  /** The listening port; the OS-assigned value when config.port is 0. Stdio mode has none. */
   get port(): number {
+    if (this.listenedPort === undefined) throw new Error('webserver: no TCP listener in stdio carrier mode')
     return this.listenedPort
   }
 
   /** The configured bind host (the loopback or all-interfaces literal). */
   get host(): Config['host'] {
     return this.config.host
+  }
+
+  /** The delivery carrier this instance was composed with. */
+  get carrier(): Config['carrier'] {
+    return this.config.carrier
+  }
+
+  /** Whether a TCP listener is currently bound (always false in stdio mode). */
+  get listening(): boolean {
+    return this.server?.listening ?? false
   }
 
   /**
@@ -107,6 +125,12 @@ export class WebServer extends Service {
    * @returns the disposer removing the route.
    */
   registerUpgrade(route: WebUpgradeRoute): () => void {
+    // Upgrade negotiation lives in the listener's 'upgrade' event; the stdio
+    // carrier has no socket, so such a registration could never answer — a
+    // composition mistake, not a runtime condition.
+    if (this.config.carrier === 'stdio') {
+      throw new Error(`webserver: upgrade route "${route.path}" cannot be served by the stdio carrier (no listening socket)`)
+    }
     if (this.upgrades.has(route.path)) {
       throw new Error(`webserver: duplicate upgrade route "${route.path}"`)
     }
@@ -144,24 +168,37 @@ export class WebServer extends Service {
     }
   }
 
-  /** Listen; resolves once the socket is bound (rejection = FAILED fiber). */
+  /**
+   * Dispatch one request through the route tables and fallback seat. This is
+   * the transport-independent core: node:http and the stdio carrier both call
+   * it, so route owners see one request/response surface either way.
+   * @param req - incoming request (method, url, headers, body stream).
+   * @param res - response to own for the full lifecycle.
+   */
+  async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
+    requests; the field is only optional on the client-side IncomingMessage type */
+    const rawPath = new URL(req.url ?? '/', 'http://x').pathname
+    const route = this.match(rawPath)
+    if (route !== undefined) {
+      await route.handler(req, res)
+      return
+    }
+    const fallback = this.fallback
+    if (fallback === undefined) {
+      res.writeHead(404)
+      res.end()
+      return
+    }
+    await fallback(req, res)
+  }
+
+  /** Bind the TCP listener; resolves once the socket is bound (rejection = FAILED fiber).
+   * Stdio mode resolves without binding — the supervisor drives dispatch via serveStdio. */
   async [Service.init](): Promise<void> {
+    if (this.config.carrier === 'stdio') return
     const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-      /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
-      requests; the field is only optional on the client-side IncomingMessage type */
-      const rawPath = new URL(req.url ?? '/', 'http://x').pathname
-      const route = this.match(rawPath)
-      if (route !== undefined) {
-        await route.handler(req, res)
-        return
-      }
-      const fallback = this.fallback
-      if (fallback === undefined) {
-        res.writeHead(404)
-        res.end()
-        return
-      }
-      await fallback(req, res)
+      await this.handleRequest(req, res)
     }
     // Last-resort guard: handle() rejecting would otherwise be an unhandled
     // rejection killing the process on one malformed request (bad %-escape,
@@ -213,23 +250,25 @@ export class WebServer extends Service {
       }
     })
 
+    const bound = this.server
     await new Promise<void>((resolve, reject) => {
-      this.server.once('error', reject)
-      this.server.listen(this.config.port, this.config.host, () => {
-        this.server.off('error', reject)
-        this.server.on('error', (err) => { this.ctx.logger.error(err) })
-        this.listenedPort = (this.server.address() as AddressInfo).port
+      bound.once('error', reject)
+      bound.listen(this.config.port, this.config.host, () => {
+        bound.off('error', reject)
+        bound.on('error', (err) => { this.ctx.logger.error(err) })
+        this.listenedPort = (bound.address() as AddressInfo).port
         resolve()
       })
     })
 
     // Node does not include upgraded sockets in closeAllConnections(). The service
     // owns them with the other connections, so it tracks and destroys them explicitly.
+    const server = this.server
     this.ctx.effect(() => async () => {
       const serverClosed = new Promise<void>((resolve) => {
-        this.server.close(() => { resolve() })
+        server.close(() => { resolve() })
       })
-      this.server.closeAllConnections()
+      server.closeAllConnections()
       const upgradedClosed = [...this.upgradedSockets].map(socket => new Promise<void>((resolve) => {
         socket.once('close', () => { resolve() })
         socket.destroy()
@@ -262,5 +301,17 @@ export class WebServer extends Service {
     return out
   }
 }
+
+export { serveStdio } from './stdio-carrier.ts'
+export {
+  LineBuffer,
+  decodeRequest,
+  encodeChunk,
+  encodeDestroy,
+  encodeEnd,
+  encodeHead,
+  type StdioRequestFrame,
+  type StdioResponseFrame,
+} from './stdio-frames.ts'
 
 export default WebServer

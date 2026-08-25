@@ -9,6 +9,7 @@ import { ConnectionController, type ConnectionConfig, type ConnectionSinks, type
 import { FixtureApiClient } from './fixture.ts'
 import { WebApiClient } from './web-api-client.ts'
 import { createWebConnectionRpc } from './rpc.ts'
+import { DesktopIpcApiClient, createDesktopConnectionRpc, readDesktopCarrierBridge } from './desktop-carrier.ts'
 import { isLoopbackHostname } from '../loopback-hostname.ts'
 import type { ClientConnectionRpc } from '../rpc.ts'
 
@@ -35,6 +36,8 @@ export {
   AbstractApiClient,
   transportError,
 } from './api.ts'
+export { readDesktopCarrierBridge, type DesktopCarrierBridge, type DesktopCarrierStream } from './desktop-carrier.ts'
+export { sseDataPayload, sseEventName } from './sse-blocks.ts'
 
 // Connection loop types are public through ConnectionHandle.start; the
 // controller remains package-internal.
@@ -85,8 +88,11 @@ export function apply(ctx: Context): void {
   const pageLocation = typeof location === 'undefined' ? undefined : location
   const fixture = pageLocation !== undefined && new URLSearchParams(pageLocation.search).has('fixture')
   const fixtureClient = fixture ? new FixtureApiClient() : undefined
-  const api: IApiClient = fixtureClient ?? new WebApiClient()
-  const rpc = fixtureClient?.rpc ?? createWebConnectionRpc()
+  const desktopBridge = readDesktopCarrierBridge()
+  const api: IApiClient = fixtureClient
+    ?? (desktopBridge === undefined ? new WebApiClient() : new DesktopIpcApiClient(desktopBridge))
+  const rpc = fixtureClient?.rpc
+    ?? (desktopBridge === undefined ? createWebConnectionRpc() : createDesktopConnectionRpc(desktopBridge))
   let started = false
   let description: HostDescription | undefined
   const descriptionListeners = new Set<() => void>()

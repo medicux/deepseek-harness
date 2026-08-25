@@ -148,10 +148,15 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
         return new Response('forbidden', { status: 403 })
       }
       if (request.method === 'GET' && (pathname === MUX_EVENTS_PATH || pathname === HOST_EVENTS_PATH)) {
-        return new Response('upgrade required', {
-          status: 426,
-          headers: { connection: 'Upgrade', upgrade: 'websocket' },
-        })
+        // The event downlink is WebSocket-only over TCP. A stdio carrier has
+        // no listening socket to upgrade, so there the SSE response streams
+        // instead of demanding an upgrade no socket-less transport can make.
+        if (ctx.get('webServer')?.carrier !== 'stdio') {
+          return new Response('upgrade required', {
+            status: 426,
+            headers: { connection: 'Upgrade', upgrade: 'websocket' },
+          })
+        }
       }
       const apiProxy = ctx.get('apiProxy')
       if (apiProxy === undefined) return new Response('not found', { status: 404 })
