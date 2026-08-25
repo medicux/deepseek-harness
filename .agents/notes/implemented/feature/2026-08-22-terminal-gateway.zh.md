@@ -10,7 +10,7 @@ GUI 新增的工作台栏没有占用者，而 harness 没有可供活动终端�
 
 ## Decision
 
-[`packages/host/terminal-gateway`](../../../../packages/host/terminal-gateway/README.md) 在 webserver 上注册五个精确匹配的 `/api/terminal.*` 路由：`open` 经由 `ctx.subprocess.spawnTerminal` 生成操作者的 `$SHELL`（完整用户权限——VS Code 集成终端语义；刻意不复用被沙箱化的 agent 终端 seam），并收养可选的仍存活缓存 id 而不再生成（过期 id 在同一请求内落回全新生成），`write` 在固定 64 KiB 上界内投递原始按键文本，`resize` 把视口变化经 seam 新增的 `resize` 转发，`close` 终止单个会话，`stream` 以 base64 输出块的 Server-Sent Events 应答，使传输与载体无关（TCP 与桌面 stdio carriage 表现一致）。每个精确路由都施加 connection 插件的浏览器信任栅（基于共享 `trustedHosts` 配置的 `isTrustedApiRequest`），因为精确路径在分发优先级上绕过了 `/api` 前缀栅栏——伪造的跨站 Host 在触及任何 shell 之前就会得到 403。会话是带品牌的 UUID，并带有一份每个接入流都会完整收到的有界滚动输出历史（约 512 KiB），因此刷新重建的是整个回滚缓冲而不只是脱离窗口；响应头立即冲刷，因此静默会话也能完成客户端 fetch；每条流以 `exit` 事件结束；销毁时终止所有存活会话。客户端半部——注册进 `workbench` slot 的基于 xterm 的插件——随后落地。
+[`packages/host/terminal-gateway`](../../../../packages/host/terminal-gateway/README.zh.md) 在 webserver 上注册五个精确匹配的 `/api/terminal.*` 路由：`open` 经由 `ctx.subprocess.spawnTerminal` 生成操作者的 `$SHELL`（完整用户权限——VS Code 集成终端语义；刻意不复用被沙箱化的 agent 终端 seam），并收养可选的仍存活缓存 id 而不再生成（过期 id 在同一请求内落回全新生成），`write` 在固定 64 KiB 上界内投递原始按键文本，`resize` 把视口变化经 seam 新增的 `resize` 转发，`close` 终止单个会话，`stream` 以 base64 输出块的 Server-Sent Events 应答，使传输与载体无关（TCP 与桌面 stdio carriage 表现一致）。每个精确路由都施加 connection 插件的浏览器信任栅（基于共享 `trustedHosts` 配置的 `isTrustedApiRequest`），因为精确路径在分发优先级上绕过了 `/api` 前缀栅栏——伪造的跨站 Host 在触及任何 shell 之前就会得到 403。会话是带品牌的 UUID，并带有一份每个接入流都会完整收到的有界滚动输出历史（约 512 KiB），因此刷新重建的是整个回滚缓冲而不只是脱离窗口；响应头立即冲刷，因此静默会话也能完成客户端 fetch；每条流以 `exit` 事件结束；销毁时终止所有存活会话。客户端半部——注册进 `workbench` slot 的基于 xterm 的插件——随后落地。
 
 ## Alternatives considered
 

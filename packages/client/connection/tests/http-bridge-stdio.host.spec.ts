@@ -108,7 +108,7 @@ describe('bridge over the stdio carrier', () => {
       id: 3,
       method: 'POST',
       url: '/api/session.prompt',
-      headers: { 'content-type': 'application/json', 'content-length': String(160 * 1024 * 1024 + 1) },
+      headers: { 'content-type': 'application/json', 'content-length': String(300 * 1024 * 1024 + 1) },
       body: Buffer.from('{}').toString('base64'),
     }) + '\n')
     await until(() => collected.frames().some(frame => frame.t === 'end'))

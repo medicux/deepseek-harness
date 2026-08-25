@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-Harness 的唯一可配置搜索提供方挂载点，面向 [web 能力 seam](../web/README.md)（`ctx.web`）。一个插件、一个 `web-search` 设置命名空间：其 `provider` 字面量选择后端，插件以该 id 注册恰好一个 `WebSearchProvider` —— 因此 seam 选择无需固定项，提交切换立即生效。
+Harness 的唯一可配置搜索提供方挂载点，面向 [web 能力 seam](../web/README.zh.md)（`ctx.web`）。一个插件、一个 `web-search` 设置命名空间：其 `provider` 字面量选择后端，插件以该 id 注册恰好一个 `WebSearchProvider` —— 因此 seam 选择无需固定项，提交切换立即生效。
 
 两类后端：
 
@@ -60,7 +60,7 @@ Harness 的唯一可配置搜索提供方挂载点，面向 [web 能力 seam](..
 
 ## Model Experience
 
-间接地经由 [`dsh-tool-web`](../tool-web/README.md)：它在 `maxResults` 上限内保留每个后端归一化后的来源（URL、标题、摘要、发布日期，以及后端产生的生成回答），并以消费者错误包装呈现本包稳定的 `WEB_*` 失败；提供方私有的线协议字段留在上下文之外。
+间接地经由 [`dsh-tool-web`](../tool-web/README.zh.md)：它在 `maxResults` 上限内保留每个后端归一化后的来源（URL、标题、摘要、发布日期，以及后端产生的生成回答），并以消费者错误包装呈现本包稳定的 `WEB_*` 失败；提供方私有的线协议字段留在上下文之外。
 
 #### KV Cache 效应
 

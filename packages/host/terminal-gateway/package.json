@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-host-terminal-gateway",
   "description": "Interactive user-terminal gateway for the DeepSeek Harness web GUI host: plain user shells over the subprocess PTY seam served on /api/terminal.* routes with SSE output streaming",
-  "version": "0.1.0-rc.8",
+  "version": "0.1.1-rc.2",
   "publishConfig": {
     "access": "public"
   },

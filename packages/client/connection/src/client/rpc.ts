@@ -11,11 +11,16 @@ import { assertRpcTarget } from './rpc-target.ts'
 
 const INTERNAL_BASE = 'http://dsh.internal'
 
+/** Transport this caller posts through; same signature as the global `fetch`. */
+export type RpcFetch = (input: URL, init: RequestInit) => Promise<Response>
+
 /**
  * Create the browser-backed generic RPC caller.
+ * @param doFetch - transport override; defaults to the page's global fetch.
  * @returns caller that owns request correlation and response-envelope validation.
  */
-export function createWebConnectionRpc(): ClientConnectionRpc {
+export function createWebConnectionRpc(doFetch?: RpcFetch): ClientConnectionRpc {
+  const send: RpcFetch = doFetch ?? ((input, init) => globalThis.fetch(input, init))
   return {
     async call(channel, endpoint, payload, signal) {
       assertRpcTarget(channel, endpoint)
@@ -26,7 +31,7 @@ export function createWebConnectionRpc(): ClientConnectionRpc {
         method: endpoint,
         payload,
       }
-      const response = await globalThis.fetch(
+      const response = await send(
         new URL(`${channel}/${endpoint}`, resolveBase()),
         {
           method: 'POST',

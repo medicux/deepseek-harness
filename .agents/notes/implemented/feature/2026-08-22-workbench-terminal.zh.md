@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-[`packages/client/ui-terminal`](../../../../packages/client/ui-terminal/README.md) 将 xterm.js 面板注册进 ui-layout 的 root 作用域 `workbench` slot。展开该栏即打开一个网关会话并在面板挂载期间绑定：输出以 base64 SSE 帧从 `/api/terminal.stream` 流入并直接解码进模拟器，按键原样转发到 `/api/terminal.write`（PTY 负责回显与行规程），ResizeObserver 经由 fit 插件建议的网格驱动 `/api/terminal.resize` 并跳过无变化的 resize。关闭该栏只是隐藏视图：一个网关会话伴随面板的完整生命周期，重新展开即回到同一 shell（PTY 回滚缓冲完好无损），已退出的 shell 会在下次展开时重新生成。xterm 样式表逐字内置并带出处头注，使打包保持在共享 tsdown 预设支持的 `?inline` CSS 路径内；宿主侧桩包通过一条 cordis 行（web-app patch 中的 `ui-terminal` 与 `terminal-gateway`）组合两半。
+[`packages/client/ui-terminal`](../../../../packages/client/ui-terminal/README.zh.md) 将 xterm.js 面板注册进 ui-layout 的 root 作用域 `workbench` slot。展开该栏即打开一个网关会话并在面板挂载期间绑定：输出以 base64 SSE 帧从 `/api/terminal.stream` 流入并直接解码进模拟器，按键原样转发到 `/api/terminal.write`（PTY 负责回显与行规程），ResizeObserver 经由 fit 插件建议的网格驱动 `/api/terminal.resize` 并跳过无变化的 resize。关闭该栏只是隐藏视图：一个网关会话伴随面板的完整生命周期，重新展开即回到同一 shell（PTY 回滚缓冲完好无损），已退出的 shell 会在下次展开时重新生成。xterm 样式表逐字内置并带出处头注，使打包保持在共享 tsdown 预设支持的 `?inline` CSS 路径内；宿主侧桩包通过一条 cordis 行（web-app patch 中的 `ui-terminal` 与 `terminal-gateway`）组合两半。
 
 ## Alternatives considered
 

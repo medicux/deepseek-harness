@@ -8,7 +8,7 @@
 
 主进程以受管子进程方式启动真实的 `dsh --profile web --carrier stdio` 表面（`src/launch.ts`、`src/server-process.ts`），读取其就绪行——`dsh web-stdio: ready`，即 [web-app bundle](../../packages/bundle/web-app/src/index.ts) 的 stdio 载体信号。子进程不绑定任何套接字：请求与响应以 NDJSON 帧走文件描述符 3 和 4（[frames.ts](src/frames.ts)，与 webserver 的线上契约互为镜像）。渲染端完全不接触网络栈：preload 安装 `__DSH_IPC_CARRIER__` 席位（[preload.ts](src/preload.ts)），connection 包的选择逻辑看到席位后把 `WebApiClient` 换成 `DesktopIpcApiClient` 与桥接版 Connection RPC 调用方；[carrier.ts](src/carrier.ts) 经每流 IPC 通道应答一元请求并泵送两条事件流，转发到子进程时走帧通道。窗口加载 `dsh://app/`——一个特权自定义协议（[protocol.ts](src/protocol.ts)），其处理器在主进程侧把每个请求转发给子进程——因此渲染端不感知任何形式的 authority：HTML、静态包、boot 清单与插件包都经转发到达，子进程仍是唯一的组装归属。`DSH_DESKTOP_CARRIER=tcp` 可为诊断恢复回环监听；该模式下外壳改为用普通 `fetch` 访问上报的 URL，而非帧通道。
 
-这是 [Electron 桌面外壳 Agent Note](../../.agents/notes/implemented/feature/2026-08-22-electron-desktop-shell.md) 中分阶段计划的交付形态：页面侧套接字数为零，子进程监听器默认不复存在，而监督接缝让 Electron 与 harness 之间只隔着几个小模块：
+这是 [Electron 桌面外壳 Agent Note](../../.agents/notes/implemented/feature/2026-08-22-electron-desktop-shell.zh.md) 中分阶段计划的交付形态：页面侧套接字数为零，子进程监听器默认不复存在，而监督接缝让 Electron 与 harness 之间只隔着几个小模块：
 
 | 模块 | 契约 |
 |---|---|

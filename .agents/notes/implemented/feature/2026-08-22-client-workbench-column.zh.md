@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-[`packages/client/ui-layout`](../../../../packages/client/ui-layout/README.md) 由同一让步链求解器渲染四轨道网格（`sidebar | workbench | center | details`），其让步顺序为：详情栏先向最小值收缩并自动关闭；随后工作台才向其最小值收缩（绝不会高于自身偏好——关闭详情栏可能已释放足够空间，使工作台无需让步）并自动关闭；剩余缺口最后由中栏吸收。派生的关闭绝不改写存储的偏好宽度，因此窗口重新变宽时会自动恢复。
+[`packages/client/ui-layout`](../../../../packages/client/ui-layout/README.zh.md) 由同一让步链求解器渲染四轨道网格（`sidebar | workbench | center | details`），其让步顺序为：详情栏先向最小值收缩并自动关闭；随后工作台才向其最小值收缩（绝不会高于自身偏好——关闭详情栏可能已释放足够空间，使工作台无需让步）并自动关闭；剩余缺口最后由中栏吸收。派生的关闭绝不改写存储的偏好宽度，因此窗口重新变宽时会自动恢复。
 
 `workbench` 子 slot 由根注册与兄弟 slot 一同声明，为 root 作用域以使该栏跨会话切换存活，并携带镜像侧边栏实时让步输出的 `collapsed`/`width` 所有者份额。单 slot 语义在未被占用时不渲染任何内容，因此该栏不可见——面板动作也只是视觉上的空操作——直到某个功能在此注册认领它。布局 store 新增 `workbench` 宽度偏好（0 = 关闭），动作纪律与其兄弟一致（`setWorkbench` 钳制在 320–560 契约区间；open 仅在关闭态写入 400 默认值；close 归零），且 `ctx.layout` 扩展出 `openWorkbench()`/`closeWorkbench()`，任何插件的 apply 世界都可直接驱动该栏而无需触达 store。可发现性由框架负责：栏关闭时，侧边栏接缝上的一个细长页签（`workbenchToggle`，箭头可供性，带 aria 标签）以契约默认值打开它——这是必需的，因为零宽度下不存在拖动手柄——而打开状态下双击其手柄会再次关闭。首个预期的占用者是交互式终端；diff 与代码查看器随后跟进。
 

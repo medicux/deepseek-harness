@@ -6,13 +6,13 @@ Status: implemented
 
 ## 问题
 
-Web UI 需要一个窗口化、可独立分发的桌面应用。前端并非独立应用——只有 Node 服务器注入 `window.__DSH_BOOT__`、服务 `/api/*` 并承载 WebSocket 下行（[GUI 分层](../architecture/2026-07-19-gui-layering-and-rpc-protocol.md)）——因此桌面应用必须以某种方式运行该服务器。分层笔记预留了终局设计（Electron 外壳经 IPC fetch 载体复用客户端包、零端口），但该外壳当时并不存在；一步到位会在任何原生窗口出现之前就先撞上其最难的部分。
+Web UI 需要一个窗口化、可独立分发的桌面应用。前端并非独立应用——只有 Node 服务器注入 `window.__DSH_BOOT__`、服务 `/api/*` 并承载 WebSocket 下行（[GUI 分层](../architecture/2026-07-19-gui-layering-and-rpc-protocol.zh.md)）——因此桌面应用必须以某种方式运行该服务器。分层笔记预留了终局设计（Electron 外壳经 IPC fetch 载体复用客户端包、零端口），但该外壳当时并不存在；一步到位会在任何原生窗口出现之前就先撞上其最难的部分。
 
 ## 决策
 
 ### 一个监督真实 `dsh --profile web` 表面的薄 Electron 外壳
 
-[`apps/desktop`](../../../../apps/desktop/README.md)（`@deepseek-ai/dsh-desktop`）把已发布的 `dsh --profile web` 表面作为受管子进程启动——源码启动传 `--carrier stdio`，子进程不绑定任何套接字；`DSH_DESKTOP_CARRIER=tcp` 可为诊断恢复回环监听——随后解析 web-app bundle 在 Loader 结算后打印的就绪行（stdio 模式为 `dsh web-stdio: ready`；tcp 模式为 `dsh web: <url>`）。渲染端就是普通 Web 客户端，但其 API 流量走 IPC 载体而非任何网络栈：preload 安装 `__DSH_IPC_CARRIER__` 座位，连接包在检测到该座位时选用 `DesktopIpcApiClient` 及经桥接的 Connection RPC 调用器，外壳把一元请求转发给受管子进程，并把两条事件流以 ServerRequest JSON 文本的形式经每流 IPC 通道泵送——线格式与 WebSocket 载体逐字节一致。座位还携带一个可选的原生目录选择器，由外壳的 `dialog.showOpenDialog` 应答——Host 的操作系统选择器后端没有 macOS 对话框——工作区运行时在桥暴露它时优先使用，其余环境回退到 `host.pickDirectory` RPC。窗口从 `dsh://app/` 这一特权重载方案加载：主进程处理器把 HTML、静态 bundle、boot 清单与插件包转发给子进程——渲染端看不到任何传输端点，组合所有权保持不变。外壳仍不新增任何模型可见内容，也不新增任何会话日志事件。
+[`apps/desktop`](../../../../apps/desktop/README.zh.md)（`@deepseek-ai/dsh-desktop`）把已发布的 `dsh --profile web` 表面作为受管子进程启动——源码启动传 `--carrier stdio`，子进程不绑定任何套接字；`DSH_DESKTOP_CARRIER=tcp` 可为诊断恢复回环监听——随后解析 web-app bundle 在 Loader 结算后打印的就绪行（stdio 模式为 `dsh web-stdio: ready`；tcp 模式为 `dsh web: <url>`）。渲染端就是普通 Web 客户端，但其 API 流量走 IPC 载体而非任何网络栈：preload 安装 `__DSH_IPC_CARRIER__` 座位，连接包在检测到该座位时选用 `DesktopIpcApiClient` 及经桥接的 Connection RPC 调用器，外壳把一元请求转发给受管子进程，并把两条事件流以 ServerRequest JSON 文本的形式经每流 IPC 通道泵送——线格式与 WebSocket 载体逐字节一致。座位还携带一个可选的原生目录选择器，由外壳的 `dialog.showOpenDialog` 应答——Host 的操作系统选择器后端没有 macOS 对话框——工作区运行时在桥暴露它时优先使用，其余环境回退到 `host.pickDirectory` RPC。窗口从 `dsh://app/` 这一特权重载方案加载：主进程处理器把 HTML、静态 bundle、boot 清单与插件包转发给子进程——渲染端看不到任何传输端点，组合所有权保持不变。外壳仍不新增任何模型可见内容，也不新增任何会话日志事件。
 
 ### 无边框窗口外观与桌面同客户端的契约
 
