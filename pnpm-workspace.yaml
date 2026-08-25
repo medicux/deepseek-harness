@@ -7,6 +7,10 @@ packages:
   - native/landlock-run/packages/*
   # Product assemblies over the package tier; apps/cli owns the `dsh` bin.
   - apps/*
+  # Deploy root of the desktop app's packaged harness runtime: a dependency-only
+  # manifest materialized by apps/desktop/scripts/package-desktop.ts and shipped
+  # inside the app bundle as Resources/dsh-runtime.
+  - apps/desktop/closure
   - website
   # The runnable demo leaves join as ONE workspace member: examples/package.json
   # declares the union of every leaf's cordis.yml plugins as workspace:*, so a
@@ -38,6 +42,8 @@ peerDependencyRules:
 # default and only allow scripts we need. esbuild (native binary) and lefthook
 # (git hooks) genuinely need theirs.
 allowBuilds:
+  # Electron's postinstall downloads the desktop shell's platform runtime binary.
+  electron: true
   esbuild: true
   lefthook: true
   # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.
@@ -53,6 +59,9 @@ allowBuilds:
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true
+  # Transitive of electron-builder; its Windows Squirrel stub build is a
+  # no-op for the platforms the desktop shell targets.
+  electron-winstaller: false
 
 minimumReleaseAgeExclude:
   # Fresh pi-ai releases carry the model catalog updates that are the whole

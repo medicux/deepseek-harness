@@ -1,0 +1,31 @@
+{
+  "name": "@deepseek-ai/dsh-desktop",
+  "description": "dsh desktop: Electron shell supervising the dsh web surface inside a native window",
+  "version": "0.1.0-rc.8",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "apps/desktop"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/main.js",
+  "scripts": {
+    "build": "tsc -b && tsdown",
+    "start": "electron .",
+    "package": "tsx scripts/package-desktop.ts"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.1",
+    "electron": "^43.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "files": [
+    "lib/*.js",
+    "lib/*.cjs",
+    "lib/types/**/*.d.ts"
+  ]
+}

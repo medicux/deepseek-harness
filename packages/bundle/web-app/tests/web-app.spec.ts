@@ -7,7 +7,7 @@
 
 import { EventEmitter } from 'node:events'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { fstatSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
@@ -72,8 +72,10 @@ function stageDist(): string {
 function fakeHttpServer(host: '127.0.0.1' | '0.0.0.0' = '127.0.0.1'): { server: WebServer; seat: () => unknown } {
   let fallback: unknown
   const server = {
+    carrier: 'tcp' as const,
     host,
     port: 4567,
+    get listening(): boolean { return true },
     registerFallback: (handler: unknown) => {
       fallback = handler
       return () => { fallback = undefined }
@@ -93,6 +95,25 @@ interface BashContribution {
   variables: Record<string, { description: string }>
   resolve: () => Record<string, string>
 }
+
+// The stdio frame-pipe probe reads fds 3/4, which a vitest worker does not
+// own; tests override `fstatSync` to stand in for the supervisor's pipes.
+vi.mock('node:fs', async importOriginal => ({
+  ...(await importOriginal<typeof import('node:fs')>()),
+  fstatSync: vi.fn(() => ({ isFIFO: (): boolean => true }) as unknown as ReturnType<typeof fstatSync>),
+}))
+vi.mock('node:net', async importOriginal => ({
+  ...(await importOriginal<typeof import('node:net')>()),
+  // A duplex stand-in: the carrier only attaches data/teardown listeners.
+  Socket: class {
+    write(): boolean { return true }
+    end(): void {}
+    destroy(): void {}
+    on(): this { return this }
+    once(): this { return this }
+    off(): this { return this }
+  },
+}))
 
 describe('web-app runtime glue', () => {
   it('mounts dist serving, prompt section, bash variables, and publishes the URL with the LAN snapshot', async () => {
@@ -284,6 +305,47 @@ describe('web-app runtime glue', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
     await expect(ctx.systemPrompt.assemble()).rejects.toThrow('webServer service missing')
     await ctx.fiber.dispose()
+  })
+
+  it('a stdio carrier suppresses the URL surfaces', async () => {
+    stageDist()
+    const ctx = new Context()
+    const server = {
+      carrier: 'stdio' as const,
+      host: '127.0.0.1',
+      get listening(): boolean { return false },
+      registerFallback: () => () => {},
+      applyIndexTaps: (html: string): string => html,
+    } as unknown as WebServer
+    ctx.provide('webServer', server)
+    apply(ctx, new Config({ openBrowser: false, printUrl: false, surfaceContext: true, trustedHosts: [] }))
+    await ctx.plugin(SystemPrompt, { persona: '' })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    // No socket authority exists to advertise under stdio.
+    const assembly = await ctx.systemPrompt.assemble()
+    expect(assembly.sections.find(entry => entry.name === 'app:web-surface')).toBeUndefined()
+    await expect(ctx.fiber.dispose()).resolves.toBeUndefined()
+  })
+
+  it('stdio frame mounts fail loud when fds 3/4 are not supervisor pipes', () => {
+    vi.mocked(fstatSync).mockImplementation((fd: number) => {
+      if (fd === 4) throw new Error('EBADF')
+      return { isFIFO: (): boolean => true } as unknown as ReturnType<typeof fstatSync>
+    })
+    const ctx = new Context()
+    const server = {
+      carrier: 'stdio' as const,
+      host: '127.0.0.1',
+      registerFallback: () => () => {},
+      applyIndexTaps: (html: string): string => html,
+    } as unknown as WebServer
+    ctx.provide('webServer', server)
+    try {
+      apply(ctx, new Config({ openBrowser: false, printUrl: false, surfaceContext: false, trustedHosts: [] }))
+      expect.unreachable('non-pipe fds must fail loud')
+    } catch (error) {
+      expect((error as Error).message).toMatch(/supervising parent that owns pipe fds/u)
+    }
   })
 
   it('resolves the real built frontend dist through the package exports, failing loud unbuilt', () => {
