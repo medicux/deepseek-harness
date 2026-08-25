@@ -211,8 +211,8 @@ describe('web e2e: shipped default web search', () => {
     }
 
     const auxiliaryRequests = sessionEvents.filter(
-      (event): event is Extract<SessionEvent, { type: 'web/deepseek-search-llm-request' }> =>
-        event.type === 'web/deepseek-search-llm-request',
+      (event): event is Extract<SessionEvent, { type: 'web/native-search-llm-request' }> =>
+        event.type === 'web/native-search-llm-request',
     )
     expect(auxiliaryRequests).toHaveLength(QUERIES.length)
     for (const query of QUERIES) {
@@ -222,6 +222,7 @@ describe('web e2e: shipped default web search', () => {
         throw new Error(`missing paired provider request for query: ${query}`)
       }
       expect(auxiliaryRequest.data).toEqual({
+        provider: 'deepseek',
         endpoint: `${searchBaseURL}/messages`,
         apiVersion: '2023-06-01',
         body: request.body,

@@ -78,4 +78,13 @@ export interface SettingsScope<T> {
    * @returns settlement after the clear and any latest-write recovery read.
    */
   unset(field: string): Promise<void>
+  /**
+   * Queue several field writes and clears as ONE durable mutation: the Host
+   * validates and applies the composed result once, so a multi-field save can
+   * never half-apply behind a refused op. Shares {@link set}'s ordering,
+   * revision, and recovery contract for the batch as a unit.
+   * @param ops - the field writes; `clear: true` marks a clear.
+   * @returns settlement after the whole batch and any latest-write recovery read.
+   */
+  setMany(ops: ReadonlyArray<{ field: string; clear: true } | { field: string; value: unknown }>): Promise<void>
 }

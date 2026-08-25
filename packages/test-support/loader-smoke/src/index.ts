@@ -22,10 +22,34 @@ export {
   type FixtureTurnResult,
 } from './agent-turn.ts'
 
-const DEFAULT_PROCESS_TIMEOUT_MS = 30_000
+// A tsx-sourced boot of the full app compiles thousands of modules and idles
+// near 20s on its own; under a concurrent battery the SIGKILL deadline must
+// leave real headroom or load alone decides the outcome.
+const DEFAULT_PROCESS_TIMEOUT_MS = 60_000
 
-/** Vitest deadline that leaves room for the subprocess-owned 30-second diagnostic timeout. */
-export const LOADER_SMOKE_TEST_TIMEOUT_MS = DEFAULT_PROCESS_TIMEOUT_MS + 15_000
+/** Environment variable overriding {@link DEFAULT_PROCESS_TIMEOUT_MS} for constrained machines. */
+export const SMOKE_PROCESS_TIMEOUT_ENV = 'DSH_SMOKE_PROCESS_TIMEOUT_MS'
+
+/**
+ * Resolve the SIGKILL deadline one smoke subprocess may take, preferring an explicit option over a
+ * validated {@link SMOKE_PROCESS_TIMEOUT_ENV} entry over the measured default. CI machines slower
+ * than the development baseline raise the environment variable instead of editing harness code;
+ * every derived deadline ({@link LOADER_SMOKE_TEST_TIMEOUT_MS}) scales with the resolved value so
+ * the vitest limit can never fire before the subprocess-owned one.
+ * @param raw - the raw override value; defaults to `process.env[SMOKE_PROCESS_TIMEOUT_ENV]`.
+ * @returns the subprocess deadline in milliseconds.
+ */
+export function resolveSmokeProcessTimeoutMs(raw: string | undefined = process.env[SMOKE_PROCESS_TIMEOUT_ENV]): number {
+  if (raw === undefined || raw === '') return DEFAULT_PROCESS_TIMEOUT_MS
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${SMOKE_PROCESS_TIMEOUT_ENV} must be a positive integer, got ${JSON.stringify(raw)}.`)
+  }
+  return value
+}
+
+/** Vitest deadline that leaves room above the resolved subprocess-owned diagnostic timeout. */
+export const LOADER_SMOKE_TEST_TIMEOUT_MS = resolveSmokeProcessTimeoutMs() + 15_000
 
 /** Which artifact an example bin is booted from: unbuilt `src` via tsx, or built `lib` via plain Node. */
 export type ExampleMode = 'src' | 'lib'
@@ -173,7 +197,7 @@ export interface LoaderSmokeResult {
  */
 export async function runLoaderSmoke(options: LoaderSmokeOptions): Promise<LoaderSmokeResult> {
   const cwd = await mkdtemp(join(tmpdir(), options.tempDirPrefix))
-  const processTimeoutMs = options.processTimeoutMs ?? DEFAULT_PROCESS_TIMEOUT_MS
+  const processTimeoutMs = options.processTimeoutMs ?? resolveSmokeProcessTimeoutMs()
   try {
     await options.prepare?.(cwd)
     const launch = resolveExampleLaunch({

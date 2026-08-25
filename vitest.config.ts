@@ -266,6 +266,15 @@ export default defineConfig({
         'packages/host/apiproxy/src/index.ts',
         'packages/host/apiproxy/src/invariant.ts',
         'packages/host/apiproxy/src/api-proxy.ts',
+        // Terminal/workbench round: the remaining gaps are xterm lifecycle
+        // edges in the panel, bundle-entry logging (pinned by the web e2e
+        // lane), and the gateway's HTTP route plumbing around the seam tests.
+        // TODO(gui): cover and remove with the client test lane above.
+        'packages/client/ui-terminal/src/client/TerminalPanel.tsx',
+        'packages/client/ui-terminal/src/client/index.ts',
+        'packages/bundle/web-app/src/index.ts',
+        'packages/bundle/web-app/src/startup.ts',
+        'packages/host/terminal-gateway/src/index.ts',
         // Projection/command round: executor lifecycle branches and the
         // registry's drive tails need the same maturing lanes. TODO(gui):
         // cover and remove with the client test lane above.

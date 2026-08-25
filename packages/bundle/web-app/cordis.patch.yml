@@ -96,6 +96,20 @@
     - id: directory-picker
       name: '@deepseek-ai/dsh-host-directory-picker-auto'
 
+    # Interactive user terminal in the workbench column: plain user shells via
+    # the subprocess PTY seam, streamed to the GUI over /api/terminal.* routes.
+    # The gateway authorizes its stream routes against the same LAN/trusted
+    # fence the /api routes use, so a browser allowed here is allowed there.
+    - id: terminal-gateway
+      name: '@deepseek-ai/dsh-host-terminal-gateway'
+      inject: [webRuntime]
+      config:
+        trustedHosts: !!js ctx.webRuntime.trustedHosts
+
+    # Interactive user terminal in the workbench column (xterm.js client half).
+    - id: ui-terminal
+      name: '@deepseek-ai/dsh-client-ui-terminal'
+
     # Read-only projection of current Loader entries for trusted client RPCs.
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'
@@ -124,6 +138,7 @@
       config:
         host: !!js ctx.webStartup.host ?? '127.0.0.1'
         port: !!js ctx.webStartup.port ?? 3080
+        carrier: !!js ctx.webStartup.carrier ?? 'tcp'
 
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the

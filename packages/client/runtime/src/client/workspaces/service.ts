@@ -5,6 +5,7 @@ import type {
   DirectoryListing, IApiClient, RpcError,
   SessionId, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-api-remotes/client'
+import { readDesktopCarrierBridge } from '@deepseek-ai/dsh-client-connection/client'
 import type { SnapshotStore } from '../contract/store.ts'
 import { createSnapshotStore } from '../contract/store.ts'
 import type { SessionsPort, SessionsPortList } from '../contract/sessions-port.ts'
@@ -204,9 +205,15 @@ export class WorkspaceRuntime implements IWorkspaces {
 
   /**
    * Open the Host's native directory picker (the `native` capability).
+   * Inside the desktop shell the shell's own dialog answers instead — the
+   * Host's OS-chooser backends have no macOS dialog there.
    * @returns the selected path, or null when the user cancelled.
    */
   async pickDirectory(): Promise<string | null> {
+    const seat = readDesktopCarrierBridge()
+    if (typeof seat?.pickDirectory === 'function') {
+      return await seat.pickDirectory()
+    }
     const response = await this.api.host.pickDirectory({})
     if (!response.result.ok) {
       throw new Error(`directory picker failed: ${response.result.error.message}`)

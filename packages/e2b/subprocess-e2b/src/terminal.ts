@@ -311,6 +311,15 @@ export class E2BTerminalHandle implements SubprocessTerminalHandle {
   }
 
   /** @inheritdoc */
+  resize(cols: number, rows: number): Promise<void> {
+    // No explicit exited check: once termination starts, trackOperation
+    // rejects every new operation through the aborted controller.
+    return this.trackOperation(async () => {
+      await this.sandbox.pty.resize(this.pid, { cols, rows })
+    })
+  }
+
+  /** @inheritdoc */
   inspectForeground(): Promise<SubprocessTerminalForeground | undefined> {
     return this.trackOperation(signal => this.inspectForegroundOnce(signal))
   }

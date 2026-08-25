@@ -9,6 +9,7 @@ import { ConnectionController, type ConnectionConfig, type ConnectionSinks, type
 import { FixtureApiClient } from './fixture.ts'
 import { WebApiClient } from './web-api-client.ts'
 import { createWebConnectionRpc, type RpcFetch } from './rpc.ts'
+import { DesktopIpcApiClient, createDesktopConnectionRpc, readDesktopCarrierBridge } from './desktop-carrier.ts'
 import { isLoopbackHostname } from '../loopback-hostname.ts'
 import type { ClientConnectionRpc } from '../rpc.ts'
 
@@ -35,6 +36,8 @@ export {
   AbstractApiClient,
   transportError,
 } from './api.ts'
+export { readDesktopCarrierBridge, type DesktopCarrierBridge, type DesktopCarrierStream } from './desktop-carrier.ts'
+export { sseDataPayload, sseEventName } from './sse-blocks.ts'
 
 // Connection loop types are public through ConnectionHandle.start; the
 // controller remains package-internal.
@@ -110,9 +113,15 @@ export function apply(ctx: Context): void {
   const pageLocation = typeof location === 'undefined' ? undefined : location
   const fixture = pageLocation !== undefined && new URLSearchParams(pageLocation.search).has('fixture')
   const fixtureClient = fixture ? new FixtureApiClient() : undefined
-  const transport = (globalThis as ClientTransportGlobal).__DSH_TRANSPORT__
-  const api: IApiClient = fixtureClient ?? transport?.createApiClient() ?? new WebApiClient()
-  const rpc = fixtureClient?.rpc ?? createWebConnectionRpc(transport?.fetch)
+  // Desktop shell first: the stdio frame carrier replaces fetch entirely.
+  // Otherwise the page-global transport hooks (if any) wrap the HTTP path.
+  const desktopBridge = readDesktopCarrierBridge()
+  const transport = desktopBridge === undefined ? (globalThis as ClientTransportGlobal).__DSH_TRANSPORT__ : undefined
+  const api: IApiClient = fixtureClient
+    ?? transport?.createApiClient()
+    ?? (desktopBridge === undefined ? new WebApiClient() : new DesktopIpcApiClient(desktopBridge))
+  const rpc = fixtureClient?.rpc
+    ?? (desktopBridge === undefined ? createWebConnectionRpc(transport?.fetch) : createDesktopConnectionRpc(desktopBridge))
   let started = false
   let description: HostDescription | undefined
   const descriptionListeners = new Set<() => void>()

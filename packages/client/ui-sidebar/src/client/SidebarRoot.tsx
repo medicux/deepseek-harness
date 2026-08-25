@@ -125,7 +125,10 @@ export function SidebarRoot({
       }}
       onPointerLeave={() => { armLinger() }}
     >
-      <div className={css.logoRow}>
+      {/* The desktop shell marks this row as its window-drag region; the
+          attribute is inert in browsers. The `brand` value keys the shell's
+          dropped-padding rule; traffic lights overlay it there. */}
+      <div className={css.logoRow} data-dsh-window-drag="brand">
         {/* Expanded, the brand doubles as a New Session shortcut; the
             collapsed rail's logo is the expand toggle below instead. */}
         {wide && (

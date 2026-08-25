@@ -12,8 +12,10 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process'
+import { fstatSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { networkInterfaces } from 'node:os'
+import { Socket } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -22,7 +24,7 @@ import * as FrontendStatic from '@deepseek-ai/dsh-host-frontend-static'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
-import type {} from '@deepseek-ai/dsh-host-webserver'
+import { serveStdio } from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-shell-env'
 
@@ -231,7 +233,39 @@ export function apply(ctx: Context, config: Config): void {
   // Release dependent rows only after bind-dependent trust has been sampled once.
   ctx.provide(WEB_RUNTIME_SERVICE, runtime)
   ctx.plugin(FrontendStatic, { distIndex: internals.resolveDistIndex() })
-  if (config.surfaceContext) {
+  if (ctx.webServer.carrier === 'stdio') {
+    // Frames ride fds 3/4 so stdout/stderr keep their log semantics; the
+    // supervisor owns both pipe ends and speaks stdio-frames NDJSON. A
+    // launch without that supervisor would wrap arbitrary fds — garbage in,
+    // a hung surface out — so the requirement fails loud at mount.
+    const describeFd = (fd: number): string => {
+      try {
+        return fstatSync(fd).isFIFO() ? 'a pipe' : 'not a pipe'
+      } catch {
+        return 'closed'
+      }
+    }
+    for (const fd of [3, 4] as const) {
+      const kind = describeFd(fd)
+      if (kind !== 'a pipe') {
+        throw new Error(`web-app: --carrier stdio requires a supervising parent that owns pipe fds 3 and 4; fd ${String(fd)} is ${kind}`)
+      }
+    }
+    // Pipe fds must be wrapped as sockets, not file streams: libuv polls them
+    // through the socket machinery, and ReadStream over a pipe fails ENXIO.
+    const input = new Socket({ fd: 3, readable: true, writable: false })
+    const output = new Socket({ fd: 4, readable: false, writable: true })
+    const detach = serveStdio(ctx.webServer, input, output)
+    ctx.effect(() => () => {
+      detach()
+      input.destroy()
+      output.end()
+    }, 'webApp.stdioCarrier')
+  }
+  // Both surfaces advertise the loopback URL. The stdio carrier has no
+  // socket authority to name — the desktop renderer never dials one — so
+  // they mount only for the TCP shape instead of throwing per turn/spawn.
+  if (config.surfaceContext && ctx.webServer.carrier === 'tcp') {
     ctx.inject(['systemPrompt'], (promptCtx) => {
       addHarnessSourceSection(promptCtx, SOURCE_ROOT)
       promptCtx.systemPrompt.section({
@@ -257,6 +291,10 @@ export function apply(ctx: Context, config: Config): void {
     // route owner are still mounting. Await Loader settlement first; a
     // hand-built tree without a Loader is already the complete tree.
     const announceReady = (): void => {
+      if (ctx.webServer.carrier === 'stdio') {
+        if (config.printUrl) console.log('dsh web-stdio: ready')
+        return
+      }
       const webUrl = localWebUrl(ctx)
       // Reuse the exact LAN snapshot provided to the /api trust fence.
       const lanCandidate = runtime.lanAddresses[0]

@@ -23,6 +23,8 @@ export const WEB_STARTUP_SERVICE = 'webStartup'
 export interface WebStartupValues {
   /** Whether this invocation opens the default browser after startup. */
   openBrowser: boolean
+  /** `--carrier`, delivery mode of the web transport; TCP is the browser shape. */
+  carrier: 'tcp' | 'stdio'
   /** `--host`, absent when the invocation did not name one. */
   host?: string
   /** `--port`, absent when the invocation did not name one. */
@@ -37,6 +39,7 @@ interface WebOptions {
   open: boolean
   port?: string
   trustedHost?: string[]
+  carrier?: string
 }
 
 /**
@@ -52,6 +55,7 @@ function webCommand(): Command {
     .option('--no-open', 'do not open the Web UI in the default browser')
     .option('--port <port>', 'listen port; pass 0 to let the OS pick a free one')
     .option('--trusted-host <authority...>', 'extra authority the /api browser-trust fence accepts (host or host:port; repeatable)')
+    .option('--carrier <mode>', "web transport delivery: 'tcp' (listen, default) or 'stdio' (no socket; frames on fds 3/4)")
     .addHelpText('after', `
 Examples:
   dsh --profile web                          serve on the composed host and port
@@ -77,8 +81,15 @@ export function apply(ctx: Context): void {
     if (options.port !== undefined && !/^\d+$/.test(options.port)) {
       program.error(`error: --port must be a number, got ${JSON.stringify(options.port)}`)
     }
+    let carrier: WebStartupValues['carrier'] = 'tcp'
+    if (options.carrier === 'tcp' || options.carrier === 'stdio') {
+      carrier = options.carrier
+    } else if (options.carrier !== undefined) {
+      program.error(`error: --carrier must be 'tcp' or 'stdio', got ${JSON.stringify(options.carrier)}`)
+    }
     ctx.provide(WEB_STARTUP_SERVICE, {
       openBrowser: options.open,
+      carrier,
       ...options.host !== undefined && { host: options.host },
       ...options.port !== undefined && { port: Number(options.port) },
       trustedHosts: options.trustedHost ?? [],

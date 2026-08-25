@@ -2,7 +2,7 @@
 
 English | [中文](web-server.zh.md)
 
-[dsh-host-webserver](../../packages/host/webserver) is the browser HTTP carrier for the GUI host: a single `node:http` plugin providing `ctx.webServer`, a named-route registry, index.html transform callbacks, and one fallback handler that a plugin may claim. It is not part of the agent loop and not a capability seam; it knows no harness concepts, and another plugin registers every feature route, including the `/api` bridge, plugin bundles, and the HMR event stream ([layering note](../../.agents/notes/implemented/architecture/2026-07-19-gui-layering-and-rpc-protocol.md)). It serves browsers only: Electron loads the built files over `file://` and sends fetch requests through an IPC bridge instead of this server.
+[dsh-host-webserver](../../packages/host/webserver) is the browser HTTP carrier for the GUI host: a single `node:http` plugin providing `ctx.webServer`, a named-route registry, index.html transform callbacks, and one fallback handler that a plugin may claim. It is not part of the agent loop and not a capability seam; it knows no harness concepts, and another plugin registers every feature route, including the `/api` bridge, plugin bundles, and the HMR event stream ([layering note](../../.agents/notes/implemented/architecture/2026-07-19-gui-layering-and-rpc-protocol.md)). It serves browsers only: the desktop shell loads the app over its privileged `dsh://app` scheme — the main process forwards those requests to this same dispatch — and carries API traffic through an IPC bridge instead of a socket ([desktop carrier](../../packages/client/connection/src/client/desktop-carrier.ts)).
 
 Source: [`packages/host/webserver/src/index.ts`](../../packages/host/webserver/src/index.ts)
 
@@ -29,16 +29,22 @@ Match order is fixed: exact table first, then longest matching prefix, then the 
 ## Config
 
 ```ts type-equiv
-/** Gateway config: the listen address. */
+/** Gateway config: the listen address and the delivery carrier. */
 interface Config {
-  /** Listen host; the two supported values are loopback and all-interfaces. */
+  /** Listen host; the two supported values are loopback and all-interfaces. TCP only. */
   host: '127.0.0.1' | '0.0.0.0'
-  /** Listen port; zero requests an OS-assigned port. */
+  /** Listen port; zero requests an OS-assigned port. TCP only. */
   port: number
+  /**
+   * Delivery carrier: `tcp` listens per host/port (the browser shape);
+   * `stdio` binds nothing — a supervisor drives the same dispatch through
+   * `serveStdio` over the child's pipes.
+   */
+  carrier: 'tcp' | 'stdio'
 }
 ```
 
-`host` accepts only `127.0.0.1` (default posture) and `0.0.0.0` (deliberate network exposure); there is no TLS, auth, or origin policy, so a non-loopback bind exposes the server to that network. The dist location is an assembly fact of the frontend plugin that claims the seat.
+`host` accepts only `127.0.0.1` (default posture) and `0.0.0.0` (deliberate network exposure); there is no TLS, auth, or origin policy, so a non-loopback bind exposes the server to that network. The dist location is an assembly fact of the frontend plugin that claims the seat. `carrier` selects how the same dispatch reaches a client: the default `tcp` keeps the listening socket, while `stdio` hands dispatch to a supervisor over the child's pipes.
 
 ## The service
 
@@ -95,6 +101,15 @@ registerFallback(handler: WebRoute['handler']): () => void
  * @returns the disposer removing the transform.
  */
 tapIndex(transform: (html: string) => string): () => void
+
+/**
+ * Dispatch one request through the route tables and fallback seat. This is
+ * the transport-independent core: node:http and the stdio carrier both call
+ * it, so route owners see one request/response surface either way.
+ * @param req - incoming request (method, url, headers, body stream).
+ * @param res - response to own for the full lifecycle.
+ */
+async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void>
 
 /**
  * Run an index.html body through the registered taps in registration order

@@ -36,6 +36,9 @@
         "@deepseek-ai/dsh-typert-registry",
         "@deepseek-ai/dsh-api-remotes"
       ],
+      "external": [
+        "@deepseek-ai/dsh-client-connection/client"
+      ],
       "platform": "web",
       "immediately": true
     }

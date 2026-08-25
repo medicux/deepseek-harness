@@ -1,0 +1,46 @@
+# electron-builder configuration for the DeepSeek Harness desktop shell.
+#
+# The packaged app carries two payloads:
+# - the Electron shell itself (apps/desktop lib/main.js + lib/preload.cjs);
+# - the harness runtime under Contents/Resources/dsh-runtime — a materialized
+#   deploy of apps/desktop/closure/package.json (see scripts/package.ts),
+#   which the main process launches with ELECTRON_RUN_AS_NODE=1.
+#
+# Per-platform legs run on their native OS; this config declares all of them
+# so one file stays the source of truth. Icons are deferred: builder falls
+# back to the Electron default until a designed icon set lands.
+appId: ai.deepseek.harness
+productName: DeepSeek Harness
+asar: true
+directories:
+  output: dist-packages
+  buildResources: build
+files:
+  - lib/main.js
+  - lib/preload.cjs
+  - package.json
+# The harness runtime ships as explicit pieces: electron-builder's default
+# resource filtering skips a nested node_modules unless each source is named.
+extraResources:
+  - from: dist-closure/package.json
+    to: dsh-runtime/package.json
+  - from: dist-closure/node_modules
+    to: dsh-runtime/node_modules
+    filter:
+      - '**/*'
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  identity: null # ad-hoc for local builds; release signing is a later leg
+linux:
+  category: Development
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64]
+  maintainer: deepseek

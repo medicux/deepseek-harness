@@ -857,17 +857,57 @@ export interface Config {
 
 来源：[`packages/host/frontend-static/src/index.ts:28`](../packages/host/frontend-static/src/index.ts)
 
+<a id="deepseek-aidsh-host-terminal-gateway"></a>
+
+## `@deepseek-ai/dsh-host-terminal-gateway`
+
+Requires: `webServer` · `subprocess`
+
+```ts config-catalog
+/** Gateway configuration. */
+export interface Config {
+  /**
+   * Shell argv override; when absent the gateway resolves `$SHELL`, falling
+   * back to the platform login shell (`/bin/zsh` on darwin, `/bin/bash` on
+   * linux, `powershell.exe` on win32).
+   */
+  shell: readonly string[] | undefined
+  /** TERM-to-KILL cleanup grace applied when terminating sessions. */
+  graceMs: number
+  /**
+   * Non-loopback authorities this deployment serves, shared verbatim with the
+   * connection plugin's fence so every `/api/terminal.*` exact route enforces
+   * the same DNS-rebinding/cross-site defense the `/api` prefix applies.
+   */
+  trustedHosts: string[]
+  /**
+   * Live-session ceiling. Opening past it first terminates the oldest
+   * session with no attached stream (a closed tab's orphan); when every
+   * session is attached, `open` fails loud instead of growing unbounded.
+   */
+  maxSessions: number
+}
+```
+
+来源：[`packages/host/terminal-gateway/src/index.ts:46`](../packages/host/terminal-gateway/src/index.ts)
+
 <a id="deepseek-aidsh-host-webserver"></a>
 
 ## `@deepseek-ai/dsh-host-webserver`
 
 ```ts config-catalog
-/** Gateway config: the listen address. */
+/** Gateway config: the listen address and the delivery carrier. */
 export interface Config {
-  /** Listen host; the two supported values are loopback and all-interfaces. */
+  /** Listen host; the two supported values are loopback and all-interfaces. TCP only. */
   host: '127.0.0.1' | '0.0.0.0'
-  /** Listen port; zero requests an OS-assigned port. */
+  /** Listen port; zero requests an OS-assigned port. TCP only. */
   port: number
+  /**
+   * Delivery carrier: `tcp` listens per host/port (the browser shape);
+   * `stdio` binds nothing — a supervisor drives the same dispatch through
+   * `serveStdio` over the child's pipes.
+   */
+  carrier: 'tcp' | 'stdio'
 }
 ```
 
@@ -3114,81 +3154,59 @@ export interface Config {
 
 来源：[`packages/web/web-fetch-http/src/index.ts:34`](../packages/web/web-fetch-http/src/index.ts)
 
-<a id="deepseek-aidsh-web-search-deepseek"></a>
+<a id="deepseek-aidsh-web-search"></a>
 
-## `@deepseek-ai/dsh-web-search-deepseek`
-
-需要：`web`
-
-```ts config-catalog
-/** Plugin config (all optional — `apply` fills env-var and constant defaults). */
-export interface Config {
-  /** Literal DeepSeek API key; prefer {@link apiKeyEnv} so no secret enters configuration files. */
-  apiKey?: string
-  /** Credential reference resolved for each search; defaults to `DEEPSEEK_API_KEY`. */
-  apiKeyEnv?: string
-  /** Anthropic-compatible endpoint base; `/messages` is appended. */
-  baseURL?: string
-  /** Anthropic-format model name. Defaults to `deepseek-v4-flash`. */
-  model?: string
-  /** `anthropic-version` header value. Defaults to `2023-06-01`. */
-  apiVersion?: string
-  /** Upper bound on generated tokens for the Messages request. Defaults to 4096. */
-  maxTokens?: number
-  /** Maximum `web_search` server-tool uses per request. Defaults to 5. */
-  maxUses?: number
-}
-```
-
-来源：[`packages/web/web-search-deepseek/src/index.ts:46`](../packages/web/web-search-deepseek/src/index.ts)
-
-<a id="deepseek-aidsh-web-search-exa"></a>
-
-## `@deepseek-ai/dsh-web-search-exa`
+## `@deepseek-ai/dsh-web-search`
 
 需要：`web`
 
 ```ts config-catalog
-/** Plugin config (all optional — `apply` fills env-var and constant defaults). */
-export interface Config {
-  /** Exa API key. Falls back to `$EXA_API_KEY`. Empty → provider unavailable. */
-  apiKey?: string
-  /** Endpoint base; `/search` is appended. Defaults to the public API. */
-  baseURL?: string
-  /** Retrieval mode sent as Exa's `type`. Defaults to `auto`. */
-  searchType?: 'auto' | 'keyword' | 'neural'
-  /** Default result count when a request carries no `maxResults`. Omitted = none. */
-  numResults?: number
-  /** Highlight sentences requested per result. Defaults to 1. */
-  highlightsPerResult?: number
+/** Plugin config (all fields optional — `apply` fills the selected backend's defaults). */
+export interface WebSearchPluginConfig {
+  /** Which backend serves the model-facing web_search tool. Defaults to `deepseek`. */
+  readonly provider?: SearchProviderId
+  /**
+   * Literal API key; prefer {@link apiKeyEnv} so no secret enters configuration
+   * files. Unused by `duckduckgo` (keyless).
+   */
+  readonly apiKey?: string
+  /**
+   * Credential reference naming the environment/managed key. Defaults to the
+   * selected backend's conventional name (`DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`,
+   * `GEMINI_API_KEY`, `EXA_API_KEY`, `BRAVE_API_KEY`, `PERPLEXITY_API_KEY`).
+   * Unused by `duckduckgo`.
+   */
+  readonly apiKeyEnv?: string
+  /** Endpoint base for keyed backends; blank inherits the backend default. */
+  readonly baseURL?: string
+  /** Model name for model-mediated backends (`deepseek`/`claude`/`gemini`/`perplexity`). */
+  readonly model?: string
+  /** `anthropic-version` header value (`deepseek`/`claude`). */
+  readonly apiVersion?: string
+  /** Upper bound on generated answer tokens (`deepseek`/`claude`/`perplexity`). */
+  readonly maxTokens?: number
+  /** Maximum native server-tool uses per request (`deepseek`/`claude`). */
+  readonly maxUses?: number
+  /** Exa retrieval mode sent as `type`. */
+  readonly searchType?: 'auto' | 'keyword' | 'neural'
+  /** Default result count when a request carries no bound (`exa`/`brave`/`duckduckgo`). */
+  readonly numResults?: number
+  /** Highlight sentences requested per result (`exa`). */
+  readonly highlightsPerResult?: number
+  /** Two-letter country code (`brave`). */
+  readonly country?: string
+  /** Search language (`brave`). */
+  readonly searchLang?: string
+  /** Recency window (`perplexity`). */
+  readonly searchRecency?: 'day' | 'week' | 'month' | 'year'
 }
+
+/** One search backend id (also the id the provider registers under). */
+export type SearchProviderId = typeof SEARCH_PROVIDER_IDS[number]
 ```
 
-来源：[`packages/web/web-search-exa/src/index.ts:38`](../packages/web/web-search-exa/src/index.ts)
+来源：[`packages/web/web-search/src/config.ts:18`](../packages/web/web-search/src/config.ts)
 
-<a id="deepseek-aidsh-web-search-perplexity"></a>
-
-## `@deepseek-ai/dsh-web-search-perplexity`
-
-需要：`web`
-
-```ts config-catalog
-/** Plugin config (all optional — `apply` fills env-var and constant defaults). */
-export interface Config {
-  /** Perplexity API key. Falls back to `$PERPLEXITY_API_KEY`. Empty → unavailable. */
-  apiKey?: string
-  /** Endpoint base; `/chat/completions` is appended. Defaults to the public API. */
-  baseURL?: string
-  /** Search model name. Defaults to `sonar`. */
-  model?: string
-  /** Upper bound on generated answer tokens. Defaults to 1024. */
-  maxTokens?: number
-  /** Recency window sent as `search_recency_filter`. Omitted = no filter. */
-  searchRecency?: 'day' | 'week' | 'month' | 'year'
-}
-```
-
-来源：[`packages/web/web-search-perplexity/src/index.ts:32`](../packages/web/web-search-perplexity/src/index.ts)
 
 <a id="deepseek-aidsh-workflow-worker-thread"></a>
 
@@ -3258,6 +3276,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-sidebar`（[`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-skill`（[`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-subagent`（[`packages/client/ui-subagent/src/index.ts`](../packages/client/ui-subagent/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-terminal`（[`packages/client/ui-terminal/src/index.ts`](../packages/client/ui-terminal/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-theme`（[`packages/client/ui-theme/src/index.ts`](../packages/client/ui-theme/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-tool`（[`packages/client/ui-tool/src/index.ts`](../packages/client/ui-tool/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-trajectory`（[`packages/client/ui-trajectory/src/index.ts`](../packages/client/ui-trajectory/src/index.ts)）

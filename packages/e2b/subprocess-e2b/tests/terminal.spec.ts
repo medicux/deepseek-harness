@@ -89,6 +89,7 @@ class FakeTerminalSandbox {
   readonly directories: string[] = []
   readonly writes = new Map<string, string>()
   createOptions: Parameters<Sandbox['pty']['create']>[0] | undefined
+  readonly resizes: Array<{ pid: number; cols: number; rows: number }> = []
   ambient = 'KEEP=visible\0UNICODE=你好\0NPM_TOKEN=secret\0DSH_STALE=old\0BROKEN\0=bad\0'
   sessionId = '123\n'
   foreground = '456\n'
@@ -196,6 +197,9 @@ class FakeTerminalSandbox {
       },
     },
     pty: {
+      resize: async (pid: number, size: { cols: number; rows: number }): Promise<void> => {
+        this.resizes.push({ pid, ...size })
+      },
       create: async (options: Parameters<Sandbox['pty']['create']>[0]): Promise<CommandHandle> => {
         this.createOptions = options
         if (this.createError !== undefined) throw this.createError
@@ -319,6 +323,21 @@ describe('E2B terminal allocation', () => {
     await terminated
     expect(fake.handle.disconnects).toBe(1)
     expect(fake.removed).toContain('/runtime/terminal-one')
+  })
+
+  it('forwards grid resizes while live and refuses after exit', async () => {
+    const fake = new FakeTerminalSandbox()
+    const terminal = await testSpawn(runtime(fake), spec(), '/runtime/resize-one')
+
+    await terminal.resize(120, 40)
+    expect(fake.resizes).toEqual([{ pid: 123, cols: 120, rows: 40 }])
+
+    const terminated = terminal.terminate()
+    await expect(terminal.done).resolves.toEqual({ exitCode: null, signal: 'SIGTERM' })
+    await terminated
+    // Post-terminate, the aborted operation controller names the phase.
+    await expect(terminal.resize(80, 24)).rejects.toThrow(/terminating/u)
+    expect(fake.resizes).toEqual([{ pid: 123, cols: 120, rows: 40 }])
   })
 
   it('inherits only safe ambient values and limits the allocation signal to setup', async () => {

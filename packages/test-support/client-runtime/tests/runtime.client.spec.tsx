@@ -654,6 +654,10 @@ describe('stubbed settings scope', () => {
 
     await host.scope.set('preference', 'dark')
     await host.scope.unset('preference')
+    await host.scope.setMany([
+      { field: 'preference', value: 'light' },
+      { field: 'density', clear: true },
+    ])
     host.publish({
       status: 'ready',
       value: { preference: 'system' },

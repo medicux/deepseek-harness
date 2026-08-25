@@ -42,10 +42,23 @@
   border-left: 1px solid var(--dsw-alias-border-l2);
 }
 
-/* The details subtree stays mounted at zero width, so its border must not paint
-   a 1px seam. The collapsed sidebar instead retains a bordered compact rail. */
-.frame[data-details-collapsed] .detailsCol {
+.workbenchCol {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--dsw-specific-sidebar-fill);
+  border-right: 1px solid var(--dsw-alias-border-l2);
+}
+
+/* The details and workbench subtrees stay mounted at zero width, so their
+   borders must not paint a 1px seam. The collapsed sidebar instead retains a
+   bordered compact rail. */
+.frame[data-details-collapsed] .detailsCol,
+.frame[data-workbench-collapsed] .workbenchCol {
   border-left: none;
+}
+
+.frame[data-workbench-collapsed] .workbenchCol {
+  border-right: none;
 }
 
 /* Drag handles are frame children (columns clip overflow): an 8px hit strip
@@ -75,7 +88,10 @@
   }
 }
 
-.handle[data-side='details']::after {
+/* Column pills: one affordance shared by both resizable boundaries. Each pill
+   hides until the pointer is over its column, the strip itself, or a drag. */
+.handle[data-side='details']::after,
+.handle[data-side='workbench']::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -87,8 +103,6 @@
   box-sizing: border-box;
   background: var(--dsw-alias-button-floating-fill);
   border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
-  /* Hover affordance: the details pill hides until the pointer is over its
-     column, the strip itself, or a drag. */
   opacity: 0;
   transition:
     opacity var(--ds-transition-duration-slow) var(--ds-ease-in-out),
@@ -97,14 +111,59 @@
 
 .detailsCol:hover ~ .handle[data-side='details']::after,
 .handle[data-side='details']:hover::after,
-.handle[data-side='details'][data-dragging='true']::after {
+.handle[data-side='details'][data-dragging='true']::after,
+.workbenchCol:hover ~ .handle[data-side='workbench']::after,
+.handle[data-side='workbench']:hover::after,
+.handle[data-side='workbench'][data-dragging='true']::after {
   opacity: 1;
 }
 
 .handle[data-side='details']:hover::after,
-.handle[data-side='details'][data-dragging='true']::after {
+.handle[data-side='details'][data-dragging='true']::after,
+.handle[data-side='workbench']:hover::after,
+.handle[data-side='workbench'][data-dragging='true']::after {
   background: var(--dsw-alias-button-floating-hover);
   border-color: var(--dsw-alias-border-l3);
+}
+/* Workbench toggle: a slim tab on the sidebar's seam, visible only while the
+   column is closed — the only discoverable way to open it (the drag handle
+   does not exist at zero width). Straddles the border so it reads as belonging
+   to the boundary, not to either column. */
+/* Straddles the sidebar's right edge: half its 14px width hangs over the
+   sidebar so the hit area is centered on the boundary, not beside it. */
+.workbenchToggle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 56px;
+  margin-left: -7px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+.workbenchToggleChevron {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid var(--dsw-alias-icon-secondary);
+  opacity: 0.55;
+  transition:
+    opacity var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    transform var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+.workbenchToggle:hover .workbenchToggleChevron,
+.workbenchToggle:focus-visible .workbenchToggleChevron {
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 .overlayLayer {

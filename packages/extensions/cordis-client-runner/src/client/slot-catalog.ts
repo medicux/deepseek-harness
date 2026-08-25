@@ -1172,7 +1172,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'details\', () => ctx.slots.register(\n      { name: \'details\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-layout/src/client/index.ts:72',
+    source: 'packages/client/ui-layout/src/client/index.ts:86',
   },
   {
     key: 'root',
@@ -1586,7 +1586,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     occupants: [],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'shell.overlay\', () => ctx.slots.register(\n      { name: \'shell.overlay\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-layout/src/client/index.ts:83',
+    source: 'packages/client/ui-layout/src/client/index.ts:97',
   },
   {
     key: 'sidebar',
@@ -1883,6 +1883,32 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'tool.view.cordis\', () => ctx.slots.register(\n      { name: \'tool.view.cordis\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
     source: 'packages/extensions/ui-cordis/src/client/slots.ts:31',
+  },
+  {
+    key: 'workbench',
+    kind: 'single',
+    scope: 'root',
+    summary: 'The whole left expandable view surface (diff, code, image, and future browser views), between the sidebar and the conversation.',
+    doc: 'The whole left expandable view surface (diff, code, image, and future\nbrowser views), between the sidebar and the conversation. UNOCCUPIED\nby default: single-slot semantics render nothing until a feature\nclaims it, so the column stays invisible until then. Registering here\nreplaces the column outright; features wanting multiple simultaneous\nviews declare their own inner seats inside their occupant.\n\nRoot scope: the column outlives session switches; session-scoped\ncontent is the occupant\'s own store concern. The occupant receives\nlive column state (collapsed, width) from the frame\'s concession\nsolve.',
+    registerOptions: [],
+    ownerProps: [
+      '/**\n * Workbench owner share: live column state from the frame\'s concession\n * solve — `collapsed` is the derived zero-width state (auto-close included).\n */\nexport interface WorkbenchOwnerProps {\n  /** True when the workbench column is closed (including concession auto-close). */\n  collapsed: boolean\n  /** Rendered column width in px. */\n  width: number\n}',
+    ],
+    ownerPropsReferences: [],
+    standardProps: [
+      'useSessions: SnapshotSelectorHook<SessionListState>',
+      'useWorkspaces: SnapshotSelectorHook<import(\'./workspaces/service.ts\').WorkspaceListState>',
+    ],
+    keyDomain: '',
+    hookContext: '',
+    slotInject: '',
+    declaredBy: 'an entry in \'root\' (client-ui-layout), so it exists while that entry is mounted',
+    occupants: [
+      'client-ui-terminal TerminalPanel',
+    ],
+    replaceRisk: 'shadows-shipped-ui',
+    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'workbench\', () => ctx.slots.register(\n      { name: \'workbench\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+    source: 'packages/client/ui-layout/src/client/index.ts:76',
   },
 ]
 /* jscpd:ignore-end */

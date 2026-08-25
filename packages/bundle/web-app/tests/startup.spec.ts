@@ -56,6 +56,7 @@ export const apply = ctx => globalThis.__webStartupApply(ctx)
     `  inject: [${WEB_STARTUP_SERVICE}]`,
     '  config:',
     "    host: !!js ctx.webStartup.host ?? '127.0.0.1'",
+    '    carrier: !!js ctx.webStartup.carrier',
     '    openBrowser: !!js ctx.webStartup.openBrowser',
     '    port: !!js ctx.webStartup.port ?? 3080',
     '    trustedHosts: !!js ctx.webStartup.trustedHosts',
@@ -96,6 +97,7 @@ describe('web command-line provider', () => {
       '--trusted-host', '10.0.0.9',
     ])
     expect(values).toEqual({
+      carrier: 'tcp',
       host: '127.0.0.1',
       openBrowser: false,
       port: 8080,
@@ -107,8 +109,9 @@ describe('web command-line provider', () => {
 
   it('leaves deployment values to each consumer when flags omit them', async () => {
     const { values, observed } = await bootProvider([])
-    expect(values).toEqual({ openBrowser: true, trustedHosts: [] })
+    expect(values).toEqual({ carrier: 'tcp', openBrowser: true, trustedHosts: [] })
     expect(observed.readerConfig).toEqual({
+      carrier: 'tcp',
       host: '127.0.0.1',
       openBrowser: true,
       port: 3080,

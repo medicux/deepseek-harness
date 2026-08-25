@@ -80,6 +80,9 @@ export function ConversationSessionHeader({
     <header
       className={clsx(css.header, hideChrome && css.headerHidden)}
       aria-hidden={hideChrome || undefined}
+      /* Desktop shells turn this header into their window-drag region; the
+         attribute is inert in browsers. */
+      data-dsh-window-drag=""
     >
       {!hideChrome && (
         <>

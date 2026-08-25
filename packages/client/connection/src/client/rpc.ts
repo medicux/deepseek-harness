@@ -7,10 +7,9 @@ import {
 } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { ClientConnectionRpc } from '../rpc.ts'
 import { randomUuid } from './random-uuid.ts'
+import { assertRpcTarget } from './rpc-target.ts'
 
 const INTERNAL_BASE = 'http://dsh.internal'
-const CHANNEL_PATTERN = /^\/[A-Za-z0-9._~-]+$/
-const ENDPOINT_SEGMENT_PATTERN = /^[A-Za-z0-9_$.-]+$/
 
 /** Transport this caller posts through; same signature as the global `fetch`. */
 export type RpcFetch = (input: URL, init: RequestInit) => Promise<Response>
@@ -24,7 +23,7 @@ export function createWebConnectionRpc(doFetch?: RpcFetch): ClientConnectionRpc 
   const send: RpcFetch = doFetch ?? ((input, init) => globalThis.fetch(input, init))
   return {
     async call(channel, endpoint, payload, signal) {
-      assertTarget(channel, endpoint)
+      assertRpcTarget(channel, endpoint)
       const rpcId = RpcId(randomUuid())
       const message: ClientRequest = {
         type: 'client-request',
@@ -56,13 +55,4 @@ export function createWebConnectionRpc(doFetch?: RpcFetch): ClientConnectionRpc 
 function resolveBase(): string {
   const location = (globalThis as { location?: { origin?: string } }).location
   return location?.origin !== undefined && location.origin !== 'null' ? location.origin : INTERNAL_BASE
-}
-
-function assertTarget(channel: string, endpoint: string): void {
-  const segments = endpoint.split('/')
-  if (!CHANNEL_PATTERN.test(channel)
-    || segments.some(segment =>
-      segment === '' || segment === '.' || segment === '..' || !ENDPOINT_SEGMENT_PATTERN.test(segment))) {
-    throw new Error(`connection: invalid RPC target ${JSON.stringify(`${channel}/${endpoint}`)}`)
-  }
 }

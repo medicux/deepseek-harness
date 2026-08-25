@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-22-subprocess-terminal-resize.md
+2026-08-22-subprocess-terminal-resize.md: 13b16820ffa0979230eb904a7fa71b911264b316
+2026-08-22-subprocess-terminal-resize.zh.md: 06a04726808fb00f3c44dd283dcdaeb7871191f2

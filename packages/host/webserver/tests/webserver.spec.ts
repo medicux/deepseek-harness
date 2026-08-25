@@ -11,11 +11,12 @@ import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
-import HttpServer, { renderIndexInjections } from '../src/index.ts'
+import HttpServer, { renderIndexInjections, serveStdio, type StdioResponseFrame } from '../src/index.ts'
 
 let root: string | undefined
 let context: Context | undefined
@@ -28,14 +29,13 @@ afterEach(async () => {
 })
 
 /** Write a cordis.yml with one webserver row, then boot it through the real Loader. */
-async function loadComposition(port = 0): Promise<Context> {
+async function loadComposition(port = 0, carrier?: 'stdio'): Promise<Context> {
   root = await mkdtemp(join(tmpdir(), 'dsh-webserver-loader-'))
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
     "- name: '@deepseek-ai/dsh-host-webserver'",
     '  config:',
-    "    host: '127.0.0.1'",
-    `    port: ${String(port)}`,
+    ...(carrier === undefined ? ["    host: '127.0.0.1'", `    port: ${String(port)}`] : [`    carrier: '${carrier}'`]),
     '',
   ].join('\n'))
 
@@ -269,6 +269,38 @@ describe('real Loader composition', () => {
       context = first
       if (root !== undefined) await rm(root, { recursive: true, force: true })
       root = firstRoot
+    }
+  })
+})
+
+
+describe('real Loader composition, stdio carrier', () => {
+  it('boots without a TCP listener and answers framed requests through the same dispatch', async () => {
+    const ctx = await loadComposition(0, 'stdio')
+    const webServer = ctx.get('webServer')
+    expect(webServer).toBeDefined()
+    expect(webServer?.carrier).toBe('stdio')
+    expect(webServer?.listening).toBe(false)
+
+    const input = new PassThrough()
+    const output = new PassThrough()
+    const frames: StdioResponseFrame[] = []
+    output.on('data', (chunk: Buffer) => {
+      for (const line of chunk.toString('utf8').split('\n')) {
+        if (line.trim() !== '') frames.push(JSON.parse(line) as StdioResponseFrame)
+      }
+    })
+    const detach = serveStdio(webServer!, input, output)
+    try {
+      input.write(`${JSON.stringify({ id: 1, method: 'GET', url: '/anything', headers: {} })}\n`)
+      for (let i = 0; i < 100 && !frames.some(frame => frame.t === 'end'); i += 1) {
+        await new Promise(resolve => setTimeout(resolve, 5))
+      }
+      expect(frames[0]).toMatchObject({ id: 1, t: 'head', status: 404 })
+      expect(frames[frames.length - 1]).toMatchObject({ id: 1, t: 'end' })
+      expect(() => webServer?.port).toThrow(/no TCP listener in stdio carrier mode/u)
+    } finally {
+      detach()
     }
   })
 })

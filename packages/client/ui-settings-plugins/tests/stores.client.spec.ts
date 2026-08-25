@@ -5,7 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { stubSettingsScope, type StubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
-import { CardForm, numberField, textField } from '../src/client/card-form.ts'
+import { CardForm, numberField, selectField, textField } from '../src/client/card-form.ts'
 import { AgentLoopCardController, type AgentLoopSettings } from '../src/client/agent-loop-card-controller.ts'
 import { BashCardController, type BashSettings } from '../src/client/bash-card-controller.ts'
 import {
@@ -26,6 +26,22 @@ function acceptWrites<T>(host: StubSettingsScope<T>): void {
     const base = host.scope.getSnapshot().base as Record<string, unknown> | undefined
     host.publish({ value: { ...section(), [field]: base?.[field] } as T, user })
   })
+  // A batched mutation applies every op before the acceptance publishes.
+  host.setMany.mockImplementation((ops: Array<{ field: string } & ({ clear: true } | { value: unknown })>) => {
+    let value = section()
+    let user = layer()
+    for (const op of ops as Array<{ field: string; clear?: true; value?: unknown }>) {
+      if (op.clear === true) {
+        const { [op.field]: _dropped, ...rest } = user
+        user = rest
+        value = { ...value, [op.field]: (host.scope.getSnapshot().base as Record<string, unknown> | undefined)?.[op.field] }
+      } else {
+        user = { ...user, [op.field]: op.value }
+        value = { ...value, [op.field]: op.value }
+      }
+    }
+    host.publish({ value: value as T, user })
+  })
 }
 
 function credentialsApi(configured: boolean) {
@@ -36,6 +52,22 @@ function credentialsApi(configured: boolean) {
   const set = vi.fn(() => Promise.resolve({ rpcId: 'c-2' as never, result: { ok: true as const, value: {} } }))
   return { api: { credentials: { describe, set } } as never, describe, set }
 }
+
+describe('selectField', () => {
+  const field = selectField('provider', ['deepseek', 'exa'])
+
+  it('formats a member and blanks anything else', () => {
+    expect(field.format('exa')).toBe('exa')
+    expect(field.format('brave')).toBe('')
+    expect(field.format(7)).toBe('')
+  })
+
+  it('parses blank as clear, members as set, and strangers as invalid', () => {
+    expect(field.parse('   ')).toEqual({ kind: 'clear' })
+    expect(field.parse(' exa ')).toEqual({ kind: 'set', value: 'exa' })
+    expect(field.parse('brave')).toBeUndefined()
+  })
+})
 
 describe('CardForm', () => {
   function form() {
@@ -267,6 +299,19 @@ describe('CardForm', () => {
     expect(subject.shell().available).toBe(true)
   })
 
+  it('number bounds stage violations as invalid instead of blocking with a vague flag', () => {
+    const host = stubSettingsScope<Record<string, unknown>>()
+    const subject = new CardForm(host.scope, [numberField('maxUses', { min: 1, integer: true })])
+
+    subject.actions().edit('maxUses', '0')
+    expect(subject.field('maxUses').invalid).toBe(true)
+    subject.actions().edit('maxUses', '2.5')
+    expect(subject.field('maxUses').invalid).toBe(true)
+
+    subject.actions().edit('maxUses', '3')
+    expect(subject.field('maxUses')).toMatchObject({ invalid: false, overridden: true })
+  })
+
   it('stays unavailable while the namespace is not served', () => {
     const host = stubSettingsScope<Record<string, unknown>>()
     const subject = new CardForm(host.scope, [numberField('timeoutMs')])
@@ -304,9 +349,14 @@ describe('BashCardController', () => {
     expect(face.hooks.bashCard.getSnapshot().dirty).toBe(true)
 
     face.save()
-    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledTimes(2) })
+    // A two-field save is ONE durable mutation, so a refused op cannot
+    // half-apply the pair behind the other's back.
+    await vi.waitFor(() => { expect(host.setMany).toHaveBeenCalledTimes(1) })
 
-    expect(host.set.mock.calls).toEqual([['timeoutMs', 9_000], ['maxOutputBytes', 1_024]])
+    expect(host.setMany.mock.calls).toEqual([[[
+      { field: 'timeoutMs', value: 9_000 },
+      { field: 'maxOutputBytes', value: 1_024 },
+    ]]])
     expect(face.hooks.bashCard.getSnapshot().dirty).toBe(false)
   })
 
@@ -525,6 +575,43 @@ describe('WebSearchCardController', () => {
     expect(controller.inject().hooks.webSearchCard.getSnapshot().apiKeyConfigured).toBe(false)
   })
 
+  it('skips credential reads for the keyless backend and previews the staged provider', async () => {
+    const host = stubSettingsScope<WebSearchSettings>()
+    const credentials = credentialsApi(true)
+    const controller = new WebSearchCardController(host.scope, credentials.api)
+    const state = () => controller.inject().hooks.webSearchCard.getSnapshot()
+    await vi.waitFor(() => { expect(credentials.describe).toHaveBeenCalled() })
+    credentials.describe.mockClear()
+
+    host.publish({ status: 'ready', writable: true, value: { provider: 'duckduckgo' }, user: {} })
+    await vi.waitFor(() => { expect(state().keyVisible).toBe(false) })
+    expect(credentials.describe).not.toHaveBeenCalled()
+
+    // Staging a keyed provider preview shows the key plane again.
+    const face = controller.inject()
+    face.edit('provider', 'exa')
+    expect(state()).toMatchObject({ keyVisible: true, provider: { text: 'exa', overridden: true } })
+  })
+
+  it('reports a failed save for a staged key under the keyless backend without touching credentials', async () => {
+    const host = stubSettingsScope<WebSearchSettings>()
+    acceptWrites(host)
+    const credentials = credentialsApi(true)
+    const controller = new WebSearchCardController(host.scope, credentials.api)
+    host.publish({ status: 'ready', writable: true, value: { provider: 'duckduckgo' }, user: {} })
+    const face = controller.inject()
+    await vi.waitFor(() => { expect(face.hooks.webSearchCard.getSnapshot().keyVisible).toBe(false) })
+
+    face.edit('apiKey', 'unused-secret')
+    face.save()
+    await vi.waitFor(() => {
+      expect(face.hooks.webSearchCard.getSnapshot()).toMatchObject({ failed: true, dirty: true })
+    })
+
+    expect(credentials.set).not.toHaveBeenCalled()
+    expect(host.set).not.toHaveBeenCalled()
+  })
+
   it('saves the endpoint and the search budget together', async () => {
     const host = stubSettingsScope<WebSearchSettings>()
     acceptWrites(host)
@@ -536,10 +623,119 @@ describe('WebSearchCardController', () => {
     face.edit('baseURL', 'https://other.test')
     face.edit('maxUses', '3')
     face.save()
-    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledTimes(2) })
+    // The section fields batch into one mutation; the key stays out of it.
+    await vi.waitFor(() => { expect(host.setMany).toHaveBeenCalledTimes(1) })
 
-    expect(host.set.mock.calls).toEqual([['baseURL', 'https://other.test'], ['maxUses', 3]])
+    expect(host.setMany.mock.calls).toEqual([[[
+      { field: 'baseURL', value: 'https://other.test' },
+      { field: 'maxUses', value: 3 },
+    ]]])
     expect(credentials.set).not.toHaveBeenCalled()
+  })
+
+  it('switching to a backend that ignores staged fields pre-clears them and says so', () => {
+    const host = stubSettingsScope<WebSearchSettings>()
+    acceptWrites(host)
+    const controller = new WebSearchCardController(host.scope, credentialsApi(true).api)
+    host.publish({ status: 'ready', writable: true, value: {}, base: {}, user: {} })
+    const face = controller.inject()
+
+    face.edit('model', 'sonnet')
+    face.edit('maxUses', '4')
+    face.edit('provider', 'duckduckgo')
+
+    // The keyless backend accepts neither field; keeping them staged would
+    // deadlock the save against the plugin's applicability validator.
+    expect(face.hooks.webSearchCard.getSnapshot().clearedBySwitch).toEqual(['model', 'maxUses'])
+    face.save()
+    expect(host.setMany).not.toHaveBeenCalled()
+    expect(face.hooks.webSearchCard.getSnapshot().dirty).toBe(false)
+  })
+
+  it('a provider switch leaves inherited values alone and the notice clears on the next edit', () => {
+    const host = stubSettingsScope<WebSearchSettings>()
+    acceptWrites(host)
+    const controller = new WebSearchCardController(host.scope, credentialsApi(true).api)
+    host.publish({
+      status: 'ready',
+      writable: true,
+      value: { model: 'deepseek-chat' },
+      base: {},
+      user: { model: 'deepseek-chat' },
+    })
+    const face = controller.inject()
+
+    face.edit('provider', 'duckduckgo')
+    expect(face.hooks.webSearchCard.getSnapshot().clearedBySwitch).toEqual(['model'])
+
+    face.edit('baseURL', 'https://ddg.test')
+    expect(face.hooks.webSearchCard.getSnapshot().clearedBySwitch).toEqual([])
+  })
+
+  it('saving or discarding after a switch clears the pre-clear notice', async () => {
+    const host = stubSettingsScope<WebSearchSettings>()
+    acceptWrites(host)
+    const controller = new WebSearchCardController(host.scope, credentialsApi(true).api)
+    host.publish({ status: 'ready', writable: true, value: {}, base: {}, user: {} })
+    const face = controller.inject()
+
+    face.edit('model', 'sonnet')
+    face.edit('provider', 'duckduckgo')
+    expect(face.hooks.webSearchCard.getSnapshot().clearedBySwitch).toEqual(['model'])
+
+    face.discard()
+    expect(face.hooks.webSearchCard.getSnapshot().clearedBySwitch).toEqual([])
+
+    face.edit('maxUses', '2')
+    face.edit('provider', 'brave')
+    expect(face.hooks.webSearchCard.getSnapshot().clearedBySwitch).toEqual(['maxUses'])
+    face.save()
+    await vi.waitFor(() => { expect(host.setMany).not.toHaveBeenCalled() })
+    expect(face.hooks.webSearchCard.getSnapshot().clearedBySwitch).toEqual([])
+  })
+
+  it('a batched save that did not land keeps its drafts and flags the failure', async () => {
+    const host = stubSettingsScope<Record<string, unknown>>()
+    // A refused batch publishes nothing: the read-back sees the old layer.
+    const subject = new CardForm(host.scope, [textField('baseURL'), numberField('maxUses')])
+    host.publish({ status: 'ready', writable: true, value: {}, base: {}, user: {} })
+
+    subject.actions().edit('baseURL', 'https://x.test')
+    subject.actions().edit('maxUses', '3')
+    await subject.save()
+    expect(subject.shell()).toMatchObject({ dirty: true, failed: true, saving: false })
+  })
+
+  it('a max-bounded number rejects values above the ceiling', () => {
+    const host = stubSettingsScope<Record<string, unknown>>()
+    const subject = new CardForm(host.scope, [numberField('budget', { min: 1, integer: true, max: 10 })])
+    subject.actions().edit('budget', '11')
+    expect(subject.field('budget').invalid).toBe(true)
+    subject.actions().edit('budget', '10')
+    expect(subject.field('budget').invalid).toBe(false)
+  })
+
+  it('a mixed clear-and-set batch verifies both outcomes against the user layer', async () => {
+    const host = stubSettingsScope<Record<string, unknown>>()
+    acceptWrites(host)
+    const subject = new CardForm(host.scope, [textField('baseURL'), numberField('maxUses')])
+    host.publish({
+      status: 'ready',
+      writable: true,
+      value: { baseURL: 'https://x.test', maxUses: 3 },
+      base: {},
+      user: { baseURL: 'https://x.test', maxUses: 3 },
+    })
+
+    // Clearing one field while setting another forces the multi-op batch.
+    subject.actions().edit('baseURL', '')
+    subject.actions().edit('maxUses', '5')
+    await subject.save()
+    expect(host.setMany.mock.calls.at(-1)?.[0]).toEqual([
+      { field: 'baseURL', clear: true },
+      { field: 'maxUses', value: 5 },
+    ])
+    expect(subject.shell()).toMatchObject({ dirty: false, failed: false })
   })
 })
 
@@ -581,7 +777,7 @@ describe('ConfigurablePluginsTabController', () => {
 
   it('never dispatches a card whose namespace this deployment does not serve', async () => {
     const settings = settingsApi(['bash'])
-    const controller = new ConfigurablePluginsTabController(settings.mirror, () => ledger('bash', 'web-search-deepseek'))
+    const controller = new ConfigurablePluginsTabController(settings.mirror, () => ledger('bash', 'web-search'))
 
     await settings.mirror.ensure()
 

@@ -1,7 +1,7 @@
 /**
  * Layout plugin, browser half: one register() call contributes AppFrame into
  * the runtime's built-in 'root' slot and, in the same breath, declares the
- * four child slots (declaration = exclusive render authority), seats the
+ * five child slots (declaration = exclusive render authority), seats the
  * layout store (panel geometry), and wires the panel-action service face.
  * ctx.layout is the cross-plugin panel-action contract; navigation state lives
  * with the runtime sessions service. A second effect seats the theme
@@ -33,7 +33,7 @@ declare module '@deepseek-ai/cordis' {
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     // The 'root' entry itself is the runtime's built-in slot (declared
-    // there); these four are the frame's children, declared by the same
+    // there); these five are the frame's children, declared by the same
     // register() call that contributes AppFrame. Session owners never pass
     // sessionId: the framework injects it as a standard prop.
     /**
@@ -61,6 +61,20 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation': { kind: 'single'; scope: 'session-maybe'; owner: ConvOwnerProps }
     /**
+     * The whole left expandable view surface (diff, code, image, and future
+     * browser views), between the sidebar and the conversation. UNOCCUPIED
+     * by default: single-slot semantics render nothing until a feature
+     * claims it, so the column stays invisible until then. Registering here
+     * replaces the column outright; features wanting multiple simultaneous
+     * views declare their own inner seats inside their occupant.
+     *
+     * Root scope: the column outlives session switches; session-scoped
+     * content is the occupant's own store concern. The occupant receives
+     * live column state (collapsed, width) from the frame's concession
+     * solve.
+     */
+    'workbench': { kind: 'single'; scope: 'root'; owner: WorkbenchOwnerProps }
+    /**
      * The right details column, shown when the layout opens it. OCCUPIED by
      * ui-conversation's DetailsPanel, which declares the tool-details seat
      * inside it — registering here replaces the column and takes that seat
@@ -86,7 +100,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 // OwnerShare contracts — the render-side share the slot owner supplies at
 // renderSlot. Registrants IMPORT these and compose their full component props
-// through the four-share intersection (PropsRuntime & PropsRenderSlots &
+// through the five-share intersection (PropsRuntime & PropsRenderSlots &
 // PropsStore & I). Conversation business state and actions arrive through
 // framework-standard hooks and each registrant's inject face, not owner props.
 
@@ -101,6 +115,17 @@ export interface SidebarOwnerProps {
 /** Conversation owner share: business state and actions belong to the registrant. */
 export interface ConvOwnerProps {}
 
+/**
+ * Workbench owner share: live column state from the frame's concession
+ * solve — `collapsed` is the derived zero-width state (auto-close included).
+ */
+export interface WorkbenchOwnerProps {
+  /** True when the workbench column is closed (including concession auto-close). */
+  collapsed: boolean
+  /** Rendered column width in px. */
+  width: number
+}
+
 /** Details owner share: empty — sessionId arrives as a framework-standard prop. */
 export interface DetailsOwnerProps {}
 
@@ -109,7 +134,7 @@ export const inject = ['slots', 'theme']
 
 /**
  * Client plugin body: provide ctx.layout, then one register() call — AppFrame
- * into 'root' with the four child-slot declarations, the layout store seat,
+ * into 'root' with the five child-slot declarations, the layout store seat,
  * and the inject hook that hands the store's bound actions to the service.
  * @param ctx - client root context.
  */
@@ -121,6 +146,7 @@ export function apply(ctx: ClientContext): void {
       name: 'root',
       children: {
         'sidebar': { kind: 'single', scope: 'root' },
+        'workbench': { kind: 'single', scope: 'root' },
         'conversation': { kind: 'single', scope: 'session-maybe' },
         'details': { kind: 'single', scope: 'session' },
         'shell.overlay': { kind: 'list', scope: 'root' },

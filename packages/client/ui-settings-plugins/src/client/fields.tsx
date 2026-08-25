@@ -37,6 +37,33 @@ export interface FieldProps {
 }
 
 /**
+ * The label row every field shares: the label plus, when overridden, the badge
+ * with its reset.
+ */
+function FieldHead(props: FieldProps) {
+  return (
+    <div className={css.head}>
+      <label className={css.label} htmlFor={props.id}>{props.label}</label>
+      {props.overridden
+        ? (
+          <span className={css.badges}>
+            <span className={css.badge}>{props.overriddenLabel}</span>
+            <button
+              type="button"
+              className={css.reset}
+              disabled={props.disabled}
+              onClick={props.onReset}
+            >
+              {props.resetLabel}
+            </button>
+          </span>
+        )
+        : null}
+    </div>
+  )
+}
+
+/**
  * A staged value field. `numeric` only hints the keypad: which drafts a field
  * accepts is decided by its spec, so the control never silently rewrites what
  * the user typed.
@@ -51,24 +78,7 @@ export function ValueField(props: FieldProps & {
 }) {
   return (
     <div className={css.field}>
-      <div className={css.head}>
-        <label className={css.label} htmlFor={props.id}>{props.label}</label>
-        {props.overridden
-          ? (
-            <span className={css.badges}>
-              <span className={css.badge}>{props.overriddenLabel}</span>
-              <button
-                type="button"
-                className={css.reset}
-                disabled={props.disabled}
-                onClick={props.onReset}
-              >
-                {props.resetLabel}
-              </button>
-            </span>
-          )
-          : null}
-      </div>
+      <FieldHead {...props} />
       <input
         id={props.id}
         className={props.invalid ? css.inputInvalid : css.input}
@@ -80,6 +90,44 @@ export function ValueField(props: FieldProps & {
         disabled={props.disabled}
         onChange={(event) => { props.onEdit(event.target.value) }}
       />
+      <p className={props.invalid ? css.invalid : css.hint}>
+        {props.invalid ? props.invalidLabel : props.hint}
+      </p>
+    </div>
+  )
+}
+
+/**
+ * A staged enum field rendered as a fixed option list. The option values are
+ * the only drafts the field's spec accepts, so the control cannot go invalid;
+ * the reset gesture stages a clear back to the composition layer like any
+ * other field.
+ * @param props - the field's copy, its staged text, and the edit actions.
+ * @returns the labelled control.
+ */
+export function SelectField(props: FieldProps & {
+  /** The fixed options, in render order. */
+  options: readonly {
+    /** Value staged when chosen. */
+    value: string
+    /** Visible label. */
+    label: string
+  }[]
+}) {
+  return (
+    <div className={css.field}>
+      <FieldHead {...props} />
+      <select
+        id={props.id}
+        className={props.invalid ? css.inputInvalid : css.input}
+        value={props.text}
+        disabled={props.disabled}
+        onChange={(event) => { props.onEdit(event.target.value) }}
+      >
+        {props.options.map(option => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
       <p className={props.invalid ? css.invalid : css.hint}>
         {props.invalid ? props.invalidLabel : props.hint}
       </p>

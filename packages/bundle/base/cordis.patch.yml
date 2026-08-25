@@ -393,23 +393,26 @@
         thresholds: [3, 5, 8]
         argumentsPreviewChars: 500
 
-    # Every mode enables the stable model-facing web_search tool. DeepSeek search
-    # resolves the same DEEPSEEK_API_KEY credential the Models page manages for
-    # chat, at each search; its Messages endpoint is separate from the
-    # chat-completions endpoint, so it takes its own base-URL override. Fetch stays
-    # disabled and no fetch provider is mounted: that provider defers SSRF
-    # protection and the model would choose the request target. Search is a full
-    # auxiliary model request with server-side retrieval, so this shipped DeepSeek
-    # route gets 60s while the provider-neutral tool default remains 30s.
+    # Every mode enables the stable model-facing web_search tool through ONE
+    # configurable provider mount: `web-search` picks the backend (native:
+    # deepseek | claude | gemini; external: exa | brave | duckduckgo |
+    # perplexity) and registers exactly one ctx.web provider under that id, so
+    # the seam auto-selects it without a pinned searchProvider. The shipped
+    # deepseek backend resolves the same DEEPSEEK_API_KEY credential the Models
+    # page manages for chat, at each search; its Messages endpoint is separate
+    # from the chat-completions endpoint, so it takes its own base-URL override.
+    # Fetch stays disabled and no fetch provider is mounted: that provider
+    # defers SSRF protection and the model would choose the request target.
+    # Native search is a full auxiliary model request with server-side
+    # retrieval, so the tool gets 60s while the provider-neutral default
+    # remains 30s.
     - id: web
       name: '@deepseek-ai/dsh-web'
-      config:
-        searchProvider: deepseek-official
 
-    - id: web-search-deepseek
-      name: '@deepseek-ai/dsh-web-search-deepseek'
+    - id: web-search
+      name: '@deepseek-ai/dsh-web-search'
       config:
-        apiKeyEnv: DEEPSEEK_API_KEY
+        provider: deepseek
 
     - id: tool-web
       name: '@deepseek-ai/dsh-tool-web'

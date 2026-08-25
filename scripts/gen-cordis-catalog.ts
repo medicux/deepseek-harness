@@ -539,6 +539,7 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
   'Context',
   'Error',
   'Exclude',
+  'IncomingMessage',
   'Map',
   'NonNullable',
   'Omit',
@@ -547,6 +548,7 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
   'Promise',
   'Record',
   'Readonly',
+  'ServerResponse',
   'Uint8Array',
 ])
 

@@ -11,6 +11,8 @@ class FakePty {
   pid = 123
   readonly writes: string[] = []
   readonly kills: string[] = []
+  readonly resizes: Array<[number, number]> = []
+  exited = false
   autoExitOnKill = true
   throwKill = false
   onKill?: () => void
@@ -36,6 +38,11 @@ class FakePty {
   }
 
   write(data: string): void { this.writes.push(data) }
+
+  resize(cols: number, rows: number): void {
+    if (this.exited) throw new Error('resize on an exited pty')
+    this.resizes.push([cols, rows])
+  }
 
   kill(signal?: string): void {
     if (this.throwKill) throw new Error('process raced')
@@ -91,6 +98,18 @@ function makeHandle(pty: FakePty, inspector: ProcessInspector, graceMs: number):
 }
 
 describe('LocalTerminalHandle', () => {
+  it('resizes the PTY while live and refuses once the exit event fired', async () => {
+    const pty = new FakePty()
+    const handle = makeHandle(pty, new FakeInspector(), 100)
+    await handle.resize(120, 40)
+    expect(pty.resizes).toEqual([[120, 40]])
+
+    pty.emitExit(0)
+    await handle.done
+    await expect(handle.resize(80, 24)).rejects.toThrow(/exited/u)
+    expect(pty.resizes).toEqual([[120, 40]])
+  })
+
   it('force-kills descendants around the shell during synchronous host exit', () => {
     const pty = new FakePty()
     const inspector = new FakeInspector()

@@ -77,7 +77,9 @@ export function DetailsPanel({ useSession, useSessions, sessionId, useStore, ren
 
   return (
     <div className={css.root}>
-      <div className={css.header}>
+      {/* Desktop shells turn this header into their window-drag region; the
+          attribute is inert in browsers. */}
+      <div className={css.header} data-dsh-window-drag="">
         <div className={css.title}>
           {selection === null ? t('details.title') : material?.name ?? selection.toolName ?? t('details.title')}
         </div>
