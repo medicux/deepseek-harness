@@ -7,7 +7,8 @@ import { CallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-agent-presets'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { assertFixtureInventory, launchWebScaffold, type WebScaffold } from './scaffold.ts'
+import { launchWebScaffold, type WebScaffold } from './scaffold.ts'
+import { assertFixtureInventory } from './goldens.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/minimal-preset', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')

@@ -51,6 +51,10 @@ const HANDLE_KEY_STEP = 16
 function DragHandle(props: {
   side: 'sidebar' | 'workbench' | 'details'
   left: number
+  /** Width in px of the column this handle resizes; exposed through the separator's value attributes. */
+  value: number
+  /** Viewport width in px — the separator value's upper bound. */
+  max: number
   /** Close gesture (double-click twin); only the workbench handle passes it. */
   onClose?: () => void
   onStart: () => void
@@ -111,9 +115,13 @@ function DragHandle(props: {
       className={css.handle}
       style={{ left: props.left }}
       data-side={props.side}
+      data-testid={`drag-handle-${props.side}`}
       data-dragging={dragging || undefined}
       role="separator"
       aria-orientation="vertical"
+      aria-valuenow={Math.round(props.value)}
+      aria-valuemin={0}
+      aria-valuemax={Math.round(props.max)}
       tabIndex={0}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -247,11 +255,13 @@ export function AppFrame({
         {renderSlot('shell.overlay', {})}
       </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
-      {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onNudge={(dx) => { actions.setSidebar(colsRef.current.sidebar + dx) }} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
+      {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} value={cols.sidebar} max={viewport} onStart={onSidebarStart} onNudge={(dx) => { actions.setSidebar(colsRef.current.sidebar + dx) }} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
       {cols.workbench > 0 && (
         <DragHandle
           side="workbench"
           left={cols.sidebar + cols.workbench}
+          value={cols.workbench}
+          max={viewport}
           onClose={actions.closeWorkbench}
           onStart={onWorkbenchStart}
           onNudge={(dx) => { actions.setWorkbench(colsRef.current.workbench + dx) }}
@@ -276,7 +286,7 @@ export function AppFrame({
             <span className={css.workbenchToggleChevron} aria-hidden="true" />
           </button>
         )}
-      {cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} onStart={onDetailsStart} onNudge={(dx) => { actions.setDetails(colsRef.current.details - dx) }} onDrag={onDetailsDrag} onEnd={onDragEnd} />}
+      {cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} value={cols.details} max={viewport} onStart={onDetailsStart} onNudge={(dx) => { actions.setDetails(colsRef.current.details - dx) }} onDrag={onDetailsDrag} onEnd={onDragEnd} />}
     </div>
   )
 }

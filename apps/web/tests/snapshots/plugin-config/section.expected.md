@@ -34,5 +34,5 @@
           - img
       - listitem:
         - 'button "展开设置: 网页搜索"':
-          - text: 网页搜索 DeepSeek 搜索提供方。
+          - text: 网页搜索 可配置的搜索后端：模型原生搜索或外部搜索 API。
           - img

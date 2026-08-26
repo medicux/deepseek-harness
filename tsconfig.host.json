@@ -8,6 +8,11 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
+    "apps/web/tests/accessibility-axe.e2e.ts",
+    "apps/web/tests/goldens.ts",
+    "apps/web/visual/global-setup.ts",
+    "apps/web/visual/helpers.ts",
+    "apps/web/visual/gui-surfaces.spec.ts",
     "apps/web/tests/scaffold.ts",
     "apps/web/tests/default-model.e2e.ts",
     "apps/web/tests/declared-reasoning.e2e.ts",

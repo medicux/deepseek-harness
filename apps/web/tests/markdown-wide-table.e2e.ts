@@ -29,15 +29,8 @@ import {
   SessionId,
 } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
-import {
-  assertFixtureInventory,
-  compareOrRefreshGolden,
-  launchWebScaffold,
-  seedSession,
-  watchConsole,
-  webSnapshotMode,
-  type WebScaffold,
-} from './scaffold.ts'
+import { launchWebScaffold, seedSession, watchConsole, webSnapshotMode, type WebScaffold } from './scaffold.ts'
+import { assertFixtureInventory, compareOrRefreshGolden } from './goldens.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/markdown-wide-table', import.meta.url))

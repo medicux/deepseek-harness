@@ -740,6 +740,7 @@ export function InputBar({
               value={draft}
               disabled={textareaDisabled}
               readOnly={machineBusy || workspaceTrigger}
+              data-testid="composer-input"
               aria-label={workspaceTrigger ? t('hero.chooseWorkspace') : undefined}
               aria-haspopup={workspaceTrigger ? 'menu' : undefined}
               aria-expanded={workspaceTrigger ? workspacePickerOpen : undefined}

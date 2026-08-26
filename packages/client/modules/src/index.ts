@@ -179,7 +179,10 @@ function graphRow(id: string, rev: string, fields: WebBootRowFields): WebBootEnt
  * Order composed rows so every requested dynamic package precedes its
  * consumers. An `external` specifier is either the package row it names
  * (`<pkg>/client` aliases the bare package) or a static-table name that adds no
- * graph edge.
+ * graph edge. An `inject` name is always a package-row edge: the consumer's
+ * factory reads the dependency's require-table entries at registration time,
+ * so a slot parent must initialize before an occupant registers into one of
+ * its children.
  * @param entries - composed rows in scan order.
  * @returns the same rows reordered; scan order breaks every tie.
  * @throws {Error} when a row requests itself or when the module graph has a
@@ -207,6 +210,16 @@ export function orderByModuleGraph(entries: readonly WebBootEntry[]): WebBootEnt
         throw new Error(
           `client-modules: "${entry.id}" requests module "${name}" that it answers itself `
           + '— a row must not declare its own package in dsh.client.external',
+        )
+      }
+      if (dependency !== undefined) visit(dependency)
+    }
+    for (const name of entry.inject ?? []) {
+      const dependency = rowsById.get(name)
+      if (dependency === entry) {
+        throw new Error(
+          `client-modules: "${entry.id}" injects itself `
+          + '— a row must not declare its own package in dsh.client.inject',
         )
       }
       if (dependency !== undefined) visit(dependency)

@@ -2,13 +2,8 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
-  assertFixtureInventory,
-  compareOrRefreshGolden,
-  launchWebScaffold,
-  seedSession,
-  type WebScaffold,
-} from './scaffold.ts'
+import { launchWebScaffold, seedSession, type WebScaffold } from './scaffold.ts'
+import { assertFixtureInventory, compareOrRefreshGolden } from './goldens.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/message-feedback-protocol', import.meta.url))
 const SESSION_FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')

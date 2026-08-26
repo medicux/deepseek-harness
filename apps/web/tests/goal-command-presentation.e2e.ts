@@ -7,11 +7,8 @@ import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-commands/types'
-import {
-  acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria,
-  compareOrRefreshGolden, launchWebScaffold, watchConsole, webSnapshotMode,
-  type WebScaffold,
-} from './scaffold.ts'
+import { acknowledgeReloadConnectionLoss, launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold } from './scaffold.ts'
+import { assertFixtureInventory, captureStableAria, compareOrRefreshGolden } from './goldens.ts'
 import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/goal-command-presentation', import.meta.url))

@@ -7,11 +7,8 @@ import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
-import {
-  acknowledgeReloadConnectionLoss, assertFixtureInventory, compareOrRefreshGolden,
-  fixtureUserPrompts, launchWebScaffold, seedSession, watchConsole, webSnapshotMode,
-  type WebScaffold,
-} from './scaffold.ts'
+import { acknowledgeReloadConnectionLoss, fixtureUserPrompts, launchWebScaffold, seedSession, watchConsole, webSnapshotMode, type WebScaffold } from './scaffold.ts'
+import { assertFixtureInventory, compareOrRefreshGolden } from './goldens.ts'
 import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/details-session-lifecycle', import.meta.url))

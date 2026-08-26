@@ -10,11 +10,8 @@ import {
 } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-agent'
 import { snapshotSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
-import {
-  acknowledgeReloadConnectionLoss, captureStableAria, compareOrRefreshGolden,
-  launchWebScaffold, watchConsole,
-  webSnapshotMode, type WebScaffold,
-} from './scaffold.ts'
+import { acknowledgeReloadConnectionLoss, launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold } from './scaffold.ts'
+import { captureStableAria, compareOrRefreshGolden } from './goldens.ts'
 import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
 
 const BASE_FIXTURE = fileURLToPath(new URL('./snapshots/live-interactions/session.jsonl', import.meta.url))

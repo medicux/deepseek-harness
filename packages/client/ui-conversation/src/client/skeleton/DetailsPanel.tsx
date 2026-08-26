@@ -92,7 +92,11 @@ export function DetailsPanel({ useSession, useSessions, sessionId, useStore, ren
           </svg>
         </button>
       </div>
-      <div className={css.body}>
+      {/* Keyboard-reachable scroll region: the tool-detail body overflows
+          while the panel is height-bound, and a scrollable region without
+          tab focus cannot be scrolled at all from the keyboard (axe:
+          scrollable-region-focusable). */}
+      <div className={css.body} tabIndex={0}>
         {selection === null || callId === undefined
           ? <div className={css.empty}>{t('details.empty')}</div>
           : material === null
