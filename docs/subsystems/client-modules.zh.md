@@ -14,11 +14,11 @@ Web 插件表：[dsh-client-modules](../../packages/client/modules) 中 client �
 /**
  * One composed client entry pushed by the host (a graph row). Wire
  * single source: the host node half (package root) produces this same shape.
- * `immediately` marks stage-one prefetch; `inject` is informational graph
- * metadata (the authoritative edges live in each package's `dsh.client`
- * declaration and reach fibers through entry creation). `external` carries
- * module-graph edges: unlike `inject`, they constrain code arrival because
- * `require` is synchronous (see {@link WebBootGraph.entries}).
+ * `immediately` marks stage-one prefetch. `inject` and `external` both carry
+ * module-graph edges — `external` constrains code arrival because `require`
+ * is synchronous, while `inject` constrains creation order because a slot
+ * parent must initialize before an occupant registers into one of its
+ * children (see {@link WebBootGraph.entries}).
  */
 interface WebBootEntry {
   /** Entry name == package name. */
@@ -27,7 +27,7 @@ interface WebBootEntry {
   url: string
   /** Bundle content hash (cache-busting consistency anchor). */
   rev: string
-  /** Package-name dependency edges, informational (preflight display / HMR diffing). */
+  /** Package-name edges whose rows must precede this one in creation order. */
   inject?: string[]
   /** Stage-one prefetch mark: load the script for factory registration during module-face boot. */
   immediately?: boolean

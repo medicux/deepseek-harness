@@ -7,12 +7,53 @@
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type {
-  BootManifest, ClientModuleCreateOptions, ClientModuleSystem, DshWindow,
+  BootManifest, BootPluginRow, ClientModuleCreateOptions, ClientModuleSystem, DshWindow,
 } from '@deepseek-ai/dsh-client-modules/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { BootPage } from './boot-page.ts'
 import { getStaticModules } from './seed.ts'
 import { STATE_LABELS } from './loader-status.ts'
+
+/**
+ * Partition entry names into creation levels: every name in a level depends
+ * only on names in strictly earlier levels (level 0 has no in-graph
+ * dependencies). Edges come from the wire's `inject` arrays — the same edges
+ * the Loader's require table wires — so creating level by level guarantees a
+ * slot parent initializes before any occupant of its children registers,
+ * while entries inside one level still boot in parallel.
+ * @param rows - the composed plugin rows in scan order.
+ * @returns levels of entry names, parents strictly before children.
+ * @throws {Error} when the inject graph has a cycle; the message lists it.
+ */
+export function dependencyLevels(rows: readonly BootPluginRow[]): string[][] {
+  const byId = new Map(rows.map(row => [row.id, row]))
+  const levelOf = new Map<string, number>()
+  const visiting: string[] = []
+  const visit = (row: BootPluginRow): number => {
+    const known = levelOf.get(row.id)
+    if (known !== undefined) return known
+    const cycleStart = visiting.indexOf(row.id)
+    if (cycleStart !== -1) {
+      throw new Error(`boot: plugin inject cycle ${[...visiting.slice(cycleStart), row.id].join(' -> ')}`)
+    }
+    visiting.push(row.id)
+    let level = 0
+    for (const name of row.inject) {
+      const parent = byId.get(name)
+      if (parent !== undefined) level = Math.max(level, visit(parent) + 1)
+    }
+    visiting.pop()
+    levelOf.set(row.id, level)
+    return level
+  }
+  for (const row of rows) visit(row)
+  const levels: string[][] = []
+  for (const row of rows) {
+    const level = levelOf.get(row.id) ?? 0
+    ;(levels[level] ??= []).push(row.id)
+  }
+  return levels.filter(level => level !== undefined)
+}
 import './base.css'
 
 /** Module transport hook replaced by jsdom tests. */
@@ -124,11 +165,18 @@ export class AppWebEntry {
     const rows = this.manifest.plugins.map(row => row.id)
     this.page.setTotal(rows.length)
     await prefetching
-    await Promise.all(rows.map(async (name) => {
-      this.page.setState(name, 'loading')
-      const id = await loader.create({ name })
-      if (loader.resolve(id).fiber === undefined) this.page.setState(name, 'failed')
-    }))
+    // Create in dependency levels: every entry in a level has all its
+    // `inject`/`external` parents in earlier levels, so a slot parent's
+    // children table is always declared before an occupant registers into
+    // it — regardless of how quickly each bundle evaluates. Entries within
+    // a level stay parallel.
+    for (const level of dependencyLevels(this.manifest.plugins)) {
+      await Promise.all(level.map(async (name) => {
+        this.page.setState(name, 'loading')
+        const id = await loader.create({ name })
+        if (loader.resolve(id).fiber === undefined) this.page.setState(name, 'failed')
+      }))
+    }
 
     await loader.await()
     this.assertEntriesActive(ctx)
