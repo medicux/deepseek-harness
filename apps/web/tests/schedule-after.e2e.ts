@@ -16,15 +16,8 @@ import {
   resolveEveryOccurrence,
   type EveryScheduleRecord,
 } from '@deepseek-ai/dsh-schedule'
-import {
-  assertFixtureInventory,
-  captureStableAria,
-  compareOrRefreshGolden,
-  launchWebScaffold,
-  watchConsole,
-  webSnapshotMode,
-  type WebScaffold,
-} from './scaffold.ts'
+import { launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold } from './scaffold.ts'
+import { assertFixtureInventory, captureStableAria, compareOrRefreshGolden } from './goldens.ts'
 import { connectFreshWorkspace, conversationContextKey, saveFailureShot } from './support.ts'
 
 const MODE = webSnapshotMode()
