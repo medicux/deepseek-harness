@@ -36,6 +36,19 @@ const MODE = webSnapshotMode()
 const PROMPT = 'Reply with the single word LIGHTHOUSE and stop.'
 const REPLAY_PACE_MS = 100
 
+/**
+ * Park the pointer in the viewport corner before a full-frame aria capture.
+ * The connect flow leaves the mouse wherever its last click landed, and a
+ * rest of 500ms over a composer control raises its delayed tooltip, so the
+ * golden would encode the parked pointer's geometry instead of chrome truth
+ * (the hero capture's intermittent `tooltip "Commands"` row). The top-left
+ * corner carries no tooltip anchor.
+ * @param target - page whose pointer is neutralized.
+ */
+async function parkPointer(target: Page): Promise<void> {
+  await target.mouse.move(0, 0)
+}
+
 describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', () => {
   let scaffold: WebScaffold
   let browser: Browser
@@ -117,6 +130,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
       // mean the submitted text is gone yet: under load the capture can catch
       // a textbox still holding `/plan`.
       await expect.poll(() => input.inputValue(), { timeout: 10_000 }).toBe('')
+      await parkPointer(activePage)
       const planSnapshot = await captureStableAria(activePage, '[class*="frame"]', activeScaffold.workspaceCwd)
       await compareOrRefreshGolden(PLAN_ACTIVE_EXPECTED, planSnapshot, MODE)
       const planStyle = await planButton.evaluate((element) => {
@@ -167,6 +181,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     if (MODE !== 'record') {
       // Golden of the hero's stable waiting state (captured before any send;
       // the conversation-region goldens belong to the other scenarios).
+      await parkPointer(page)
       const snapshot = await captureStableAria(page, '[class*="frame"]', scaffold.workspaceCwd)
       await compareOrRefreshGolden(HERO_EXPECTED, snapshot, MODE)
     }
