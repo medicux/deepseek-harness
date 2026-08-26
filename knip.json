@@ -601,11 +601,15 @@
         "tests/**/*.perf.ts",
         "tests/**/*.snapshot.ts",
         "tests/support.ts",
+        "tests/goldens.ts",
+        "tests/visual-server-entry.ts",
+        "visual/**/*.ts",
         "src/node-module-stub.ts"
       ],
       "project": [
         "src/**/*.ts",
-        "tests/**/*.ts"
+        "tests/**/*.ts",
+        "visual/**/*.ts"
       ],
       "ignoreDependencies": [
         "@deepseek-ai/dsh-client-ui-primitives",
