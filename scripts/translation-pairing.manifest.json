@@ -5,6 +5,7 @@
     ".agents/notes/implemented/CLAUDE.md",
     "docs/AGENTS.md",
     "docs/cordis-api/inherited.md",
+    "docs/research/gui-qa-tooling.md",
     "docs/i18n/style-samples.md",
     "docs/i18n/terminology.md",
     "docs/i18n/translation-prompt.md"
