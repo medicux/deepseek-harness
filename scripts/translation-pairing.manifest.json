@@ -1,6 +1,7 @@
 {
   "excluded": [
     ".agents/notes/AGENTS.md",
+    ".agents/notes/implemented/testing/2026-08-25-web-lane-brand-face-and-golden-drift.md",
     ".agents/notes/implemented/AGENTS.md",
     ".agents/notes/implemented/CLAUDE.md",
     "docs/AGENTS.md",

@@ -47,12 +47,19 @@ export function dependencyLevels(rows: readonly BootPluginRow[]): string[][] {
     return level
   }
   for (const row of rows) visit(row)
-  const levels: string[][] = []
+  // Level buckets keyed by number, re-emitted in ascending order: compacting
+  // a sparse array instead would need an undefined filter the element type
+  // cannot express.
+  const buckets = new Map<number, string[]>()
   for (const row of rows) {
     const level = levelOf.get(row.id) ?? 0
-    ;(levels[level] ??= []).push(row.id)
+    const bucket = buckets.get(level)
+    if (bucket === undefined) buckets.set(level, [row.id])
+    else bucket.push(row.id)
   }
-  return levels.filter(level => level !== undefined)
+  return [...buckets.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, bucket]) => bucket)
 }
 import './base.css'
 
