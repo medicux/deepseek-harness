@@ -24,7 +24,12 @@ export default defineConfig({
   },
   expect: {
     toHaveScreenshot: {
-      maxDiffPixelRatio: 0,
+      // Live Electron windows composite through the GPU window server, and
+      // solid fills can drift by one channel value between boots (~tens of
+      // pixels). Real regressions move thousands; 0.0001 absorbs only that
+      // noise. The web visual lane keeps 0 because headless Chromium
+      // rasterizes in software.
+      maxDiffPixelRatio: 0.0001,
       animations: 'disabled',
       caret: 'hide',
     },
