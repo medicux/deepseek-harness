@@ -390,7 +390,8 @@ function SessionTree({
           it shows only the empty state. */}
       <div
         className={clsx(css.list, workspaceDropAtListStart && css.listTopDropActive)}
-        {...(groups.length === 0 ? {} : { role: 'tree' as const, 'aria-label': t('section.sessions') })}
+        aria-label={t('section.sessions')}
+        {...(groups.length === 0 ? {} : { role: 'tree' as const })}
       >
         {groups.length === 0 && (
           <div className={css.empty}>{t('empty.none')}</div>
@@ -625,7 +626,8 @@ function FlatList({
           treeitem children. */}
       <div
         className={clsx(css.list, css.flatList)}
-        {...(rows.length === 0 ? {} : { role: 'tree' as const, 'aria-label': t('section.sessions') })}
+        aria-label={t('section.sessions')}
+        {...(rows.length === 0 ? {} : { role: 'tree' as const })}
       >
         {rows.length === 0 && (
           <div className={css.empty}>{t('empty.none')}</div>
@@ -712,7 +714,8 @@ function SearchResults({
       <div className={css.list}>
         <div
           className={css.searchTree}
-          {...(results.items.length === 0 ? {} : { role: 'tree' as const, 'aria-label': t('search.results.aria') })}
+          aria-label={t('search.results.aria')}
+          {...(results.items.length === 0 ? {} : { role: 'tree' as const })}
         >
           {results.items.map(result => (
             <SearchResultItem
