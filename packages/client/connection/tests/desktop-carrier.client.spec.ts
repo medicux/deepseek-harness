@@ -39,7 +39,7 @@ interface FetchInit {
   method?: string
   body?: string
   headers?: Record<string, string>
-  signal?: AbortSignal
+  token?: string
 }
 
 interface FetchCall {
@@ -49,8 +49,9 @@ interface FetchCall {
 
 type BridgeFetch = (path: string, init: FetchInit) => Promise<{ status: number; body: string }>
 
-function makeBridge(streams: FakeStream[] = []): DesktopCarrierBridge & { calls: FetchCall[] } {
+function makeBridge(streams: FakeStream[] = []): DesktopCarrierBridge & { calls: FetchCall[]; abortCalls: string[] } {
   const calls: FetchCall[] = []
+  const abortCalls: string[] = []
   const fetch: BridgeFetch = async (path, init) => {
     calls.push({ path, init })
     return { status: 200, body: JSON.stringify({ type: 'server-response', rpcId: echoId(), result: { ok: true, value: null } }) }
@@ -60,7 +61,13 @@ function makeBridge(streams: FakeStream[] = []): DesktopCarrierBridge & { calls:
     streams.push(stream)
     return stream
   }
-  return { ...{ fetch, openStream }, calls }
+  return {
+    fetch,
+    openStream,
+    abortFetch: (token: string): void => { abortCalls.push(token) },
+    calls,
+    abortCalls,
+  }
 }
 
 let nextEcho = 0
@@ -142,21 +149,33 @@ describe('DesktopIpcApiClient unary transport', () => {
     expect(call.init.headers?.['content-type']).toBe('application/json')
   })
 
-  it('propagates caller cancellation into the bridge signal', async () => {
+  it('aborts an in-flight fetch through the bridge token', async () => {
     const bridge = makeBridge()
     const seen: FetchCall[] = []
-    bridge.fetch = async (path: string, init: FetchInit) => {
+    bridge.fetch = (path: string, init: FetchInit) => new Promise((_resolve, reject) => {
       seen.push({ path, init })
-      throw new Error('aborted by test')
-    }
+      // Hangs until the renderer-side abort arrives via abortFetch.
+      const original = bridge.abortFetch.bind(bridge)
+      bridge.abortFetch = (token: string): void => { original(token); reject(new Error('aborted by test')) }
+    })
     const client2 = new DesktopIpcApiClient(bridge)
     const controller = new AbortController()
     const pending = client2.host.describe({}, controller.signal)
     await Promise.resolve()
     await Promise.resolve()
     controller.abort()
-    await expect(pending).rejects.toThrow()
-    expect(seen[0]?.init.signal?.aborted).toBe(true)
+    await expect(pending).rejects.toThrow('aborted by test')
+    expect(seen[0]?.init.token).toEqual(expect.any(String))
+    expect(bridge.abortCalls[0]).toBe(seen[0]?.init.token)
+  })
+
+  it('rejects a pre-aborted signal before reaching the bridge', async () => {
+    const bridge = makeBridge()
+    const client2 = new DesktopIpcApiClient(bridge)
+    const controller = new AbortController()
+    controller.abort()
+    await expect(client2.host.describe({}, controller.signal)).rejects.toThrow(/aborted/iu)
+    expect(bridge.calls.length).toBe(0)
   })
 })
 
@@ -171,13 +190,14 @@ class HeaderProbeClient extends DesktopIpcApiClient {
 }
 
 describe('doFetch mapping and host stream', () => {
-  function probeBridge(): { client: HeaderProbeClient; seen: Array<{ path: string; init: RequestInit }> } {
-    const seen: Array<{ path: string; init: RequestInit }> = []
+  function probeBridge(): { client: HeaderProbeClient; seen: Array<{ path: string; init: FetchInit }> } {
+    const seen: Array<{ path: string; init: FetchInit }> = []
     const client = new HeaderProbeClient({
       fetch: async (path, init) => {
         seen.push({ path, init })
         return { status: 201, body: 'raw' }
       },
+      abortFetch: () => {},
       openStream: () => new FakeStream(),
     })
     return { client, seen }
@@ -197,7 +217,9 @@ describe('doFetch mapping and host stream', () => {
     expect(seen[0]?.path).toBe('/api/x?trace=1')
     expect(seen[0]?.init.method).toBe('PUT')
     expect(seen[0]?.init.body).toBe('payload')
-    expect(seen[0]?.init.signal).toBe(controller.signal)
+    // A live signal becomes a correlation token; the signal itself stays in
+    // the renderer world (contextBridge strips its prototype).
+    expect(seen[0]?.init.token).toEqual(expect.any(String))
     expect(typeof (seen[0]?.init.headers as Record<string, string>)['x-a']).toBe('string')
   })
 
@@ -209,7 +231,7 @@ describe('doFetch mapping and host stream', () => {
       expect(seen[0]?.path).toBe('/api/y')
       expect(seen[0]?.init.method).toBe('GET')
       expect(seen[0]?.init.body).toBeUndefined()
-      expect(seen[0]?.init.signal).toBeUndefined()
+      expect(seen[0]?.init.token).toBeUndefined()
       if (headers !== undefined) {
         const mapped = seen[0]?.init.headers as Record<string, string>
         expect(Object.keys(mapped).length).toBe(1)
@@ -321,6 +343,7 @@ describe('createDesktopConnectionRpc', () => {
           body: JSON.stringify({ type: 'server-response', rpcId: request.rpcId, result: { ok: true, value: 'done' } }),
         }
       },
+      abortFetch: () => {},
       openStream: () => new FakeStream(),
     }
     const rpc = createDesktopConnectionRpc(bridge)
@@ -337,33 +360,44 @@ describe('createDesktopConnectionRpc', () => {
   it('throws a transport failure on non-200 statuses', async () => {
     const bridge: DesktopCarrierBridge = {
       fetch: async () => ({ status: 503, body: '' }),
+      abortFetch: () => {},
       openStream: () => new FakeStream(),
     }
     const rpc = createDesktopConnectionRpc(bridge)
     await expect(rpc.call('/test', 'echo', {})).rejects.toThrow(/HTTP 503/u)
   })
 
-  it('forwards a caller signal to the bridge fetch', async () => {
+  it('aborts a connection-rpc call through the bridge token', async () => {
     const seen: FetchCall[] = []
+    const abortCalls: string[] = []
     const controller = new AbortController()
+    let rejectPending: ((error: Error) => void) | undefined
     const bridge2: DesktopCarrierBridge = {
-      fetch: async (path, init) => {
+      fetch: (path: string, init: FetchInit) => new Promise((_resolve, reject) => {
         seen.push({ path, init })
-        return { status: 200, body: '{}' }
+        // Hangs until the renderer-side abort arrives via abortFetch.
+        rejectPending = reject
+      }),
+      abortFetch: (token: string): void => {
+        abortCalls.push(token)
+        rejectPending?.(new Error('aborted by test'))
       },
       openStream: () => new FakeStream(),
     }
     const rpc = createDesktopConnectionRpc(bridge2)
     const pending = rpc.call('/test', 'echo', {}, controller.signal)
     await Promise.resolve()
+    await Promise.resolve()
     controller.abort()
-    await expect(pending).rejects.toThrow()
-    expect(seen[0]?.init.signal?.aborted).toBe(true)
+    await expect(pending).rejects.toThrow('aborted by test')
+    expect(seen[0]?.init.token).toEqual(expect.any(String))
+    expect(abortCalls[0]).toBe(seen[0]?.init.token)
   })
 
   it('rejects on an rpcId echo mismatch', async () => {
     const bridge2: DesktopCarrierBridge = {
       fetch: async () => ({ status: 200, body: JSON.stringify({ type: 'server-response', rpcId: 'other', result: { ok: true, value: null } }) }),
+      abortFetch: () => {},
       openStream: () => new FakeStream(),
     }
     const rpc = createDesktopConnectionRpc(bridge2)

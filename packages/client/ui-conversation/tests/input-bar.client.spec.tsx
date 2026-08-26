@@ -1079,6 +1079,7 @@ describe('running and lock semantics', () => {
     })
     expect(textarea.disabled).toBe(false)
     expect(textarea.readOnly).toBe(true)
+    expect(textarea.getAttribute('role')).toBe('button')
     expect(textarea.getAttribute('aria-haspopup')).toBe('menu')
     expect(textarea.getAttribute('aria-expanded')).toBe('false')
     expect((view.getByLabelText('命令') as HTMLButtonElement).disabled).toBe(true)

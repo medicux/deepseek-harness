@@ -137,20 +137,22 @@ export const DESKTOP_TOP_STRIP_ID = 'dsh-desktop-top-strip'
  *   itself, so the new air is draggable exactly where it renders. The
  *   collapsed rail keeps its own tighter spacing (its two-class rule
  *   outranks this attribute selector).
- * - A 6px transparent edge across the whole window top is a drag region, so
- *   grabbing the very top of either column works even while the session
- *   header is hidden (blank hero). It covers no interactive pixels: every
- *   control starts below it, and it hides with fullscreen like the rest of
- *   the chrome.
+ * - A 12px transparent edge across the whole window top is a drag region, so
+ *   grabbing the very top of any column drags the window even while the
+ *   session header is hidden (blank hero). It stays above every control's
+ *   clickable area: the tallest chrome that starts at y=0 is the sidebar
+ *   brand row, which drags through its own padding instead.
  */
 export const TOP_STRIP_CSS = `
-[data-dsh-window-drag='brand'] { padding-top: 26px; }
+/* !important: the shell owns this chrome and must win over any client-side
+   logo-row spacing regardless of stylesheet order or specificity. */
+[data-dsh-window-drag='brand'] { padding-top: 40px !important; }
 #${DESKTOP_TOP_STRIP_ID} {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: 6px;
+  height: 12px;
   -webkit-app-region: drag;
   z-index: 2147483646;
 }

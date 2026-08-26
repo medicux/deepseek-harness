@@ -8,6 +8,9 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
+    "apps/desktop/qa/helpers.ts",
+    "apps/desktop/qa/playwright.config.ts",
+    "apps/desktop/qa/shell.spec.ts",
     "apps/web/tests/accessibility-axe.e2e.ts",
     "apps/web/tests/goldens.ts",
     "apps/web/visual/global-setup.ts",

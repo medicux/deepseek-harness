@@ -50,7 +50,10 @@ export function registerDesktopCarrier(
     const request = readInit(init)
     const channel = getChannel?.()
     const controller = new AbortController()
-    if (typeof token === 'string' && token !== '') aborts.set(token, controller)
+    // The renderer's correlation token (inside init) is the address
+    // `carrier-abort` sends; the preload's own outer token is the fallback.
+    const abortKey = request.token ?? (typeof token === 'string' && token !== '' ? token : undefined)
+    if (abortKey !== undefined) aborts.set(abortKey, controller)
     try {
       if (channel === undefined) {
         const base = getBaseUrl()
@@ -73,7 +76,7 @@ export function registerDesktopCarrier(
       }, controller.signal)
       return { status: response.status, body: response.body.toString('utf8') }
     } finally {
-      if (typeof token === 'string') aborts.delete(token)
+      if (abortKey !== undefined) aborts.delete(abortKey)
     }
   })
 
@@ -216,11 +219,13 @@ interface ForwardedInit {
   method: string
   headers?: Record<string, string> | undefined
   body?: string | undefined
+  /** Renderer-side abort correlation token; the key `carrier-abort` addresses. */
+  token?: string | undefined
 }
 
 function readInit(init: unknown): ForwardedInit {
   if (typeof init !== 'object' || init === null) return { method: 'GET' }
-  const record = init as { method?: unknown; headers?: unknown; body?: unknown }
+  const record = init as { method?: unknown; headers?: unknown; body?: unknown; token?: unknown }
   const method = typeof record.method === 'string' ? record.method : 'GET'
   const headers = typeof record.headers === 'object' && record.headers !== null
     ? Object.fromEntries(
@@ -229,9 +234,11 @@ function readInit(init: unknown): ForwardedInit {
     )
     : undefined
   const body = typeof record.body === 'string' ? record.body : undefined
+  const token = typeof record.token === 'string' && record.token !== '' ? record.token : undefined
   return {
     method,
     ...(headers === undefined ? {} : { headers }),
     ...(body === undefined ? {} : { body }),
+    ...(token === undefined ? {} : { token }),
   }
 }

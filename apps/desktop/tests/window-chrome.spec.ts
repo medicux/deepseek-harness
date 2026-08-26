@@ -105,7 +105,7 @@ describe('TOP_STRIP_CSS', () => {
   it('adds an invisible full-width grab edge that hides in fullscreen', () => {
     expect(TOP_STRIP_CSS).toContain(`#${DESKTOP_TOP_STRIP_ID} {`)
     expect(TOP_STRIP_CSS).toContain('-webkit-app-region: drag;')
-    expect(TOP_STRIP_CSS).toContain('height: 6px;')
+    expect(TOP_STRIP_CSS).toContain('height: 12px;')
     expect(TOP_STRIP_CSS).toContain('body:fullscreen')
   })
 })

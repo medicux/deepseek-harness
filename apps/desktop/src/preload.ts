@@ -19,19 +19,21 @@ contextBridge.exposeInMainWorld('dshDesktop', {
 let fetchToken = 0
 
 contextBridge.exposeInMainWorld('__DSH_IPC_CARRIER__', {
-  fetch: (path: string, init: { method?: string; body?: string; headers?: Record<string, string>; signal?: AbortSignal }) => {
+  // `init.token` is an opaque correlation string generated renderer-side:
+  // live AbortSignals cannot cross contextBridge (their methods are
+  // stripped), so abort wiring stays in the renderer and reaches the main
+  // process through abortFetch.
+  fetch: (path: string, init: { method?: string; body?: string; headers?: Record<string, string>; token?: string }) => {
     const token = `fetch-${String(++fetchToken)}`
-    // A pre-aborted signal must fail the call here: the main-side token is
-    // registered only inside the later invoke, so an abort sent now would be
-    // dropped and the call would run to completion.
-    if (init.signal?.aborted === true) return Promise.reject(new Error('This operation was aborted'))
-    const onAbort = (): void => { ipcRenderer.send('dsh-desktop:carrier-abort', token) }
-    if (init.signal !== undefined) init.signal.addEventListener('abort', onAbort, { once: true })
     return ipcRenderer.invoke('dsh-desktop:carrier-fetch', token, path, {
       method: init.method,
       headers: init.headers,
       body: init.body,
+      ...(init.token === undefined ? {} : { token: init.token }),
     })
+  },
+  abortFetch: (token: string): void => {
+    ipcRenderer.send('dsh-desktop:carrier-abort', token)
   },
   openStream: (path: string) => {
     const id = `stream-${String(++fetchToken)}`

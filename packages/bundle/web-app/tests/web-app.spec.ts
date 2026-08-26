@@ -348,6 +348,50 @@ describe('web-app runtime glue', () => {
     }
   })
 
+  it('stdio frame mounts over the socketpair fds a spawned supervisor provides', () => {
+    // The desktop shell's spawn hands over libuv stdio pipes, which fstat on
+    // POSIX reports as AF_UNIX sockets, not FIFOs; the mount must accept the
+    // shape its only real supervisor produces.
+    vi.mocked(fstatSync).mockImplementation(() => ({
+      isFIFO: (): boolean => false,
+      isSocket: (): boolean => true,
+    }) as unknown as ReturnType<typeof fstatSync>)
+    stageDist()
+    const ctx = new Context()
+    const server = {
+      carrier: 'stdio' as const,
+      host: '127.0.0.1',
+      get listening(): boolean { return false },
+      registerFallback: () => () => {},
+      applyIndexTaps: (html: string): string => html,
+    } as unknown as WebServer
+    ctx.provide('webServer', server)
+    expect(() => {
+      apply(ctx, new Config({ openBrowser: false, printUrl: false, surfaceContext: false, trustedHosts: [] }))
+    }).not.toThrow()
+  })
+
+  it('stdio frame rejects regular-file fds that are neither FIFO nor socket', () => {
+    vi.mocked(fstatSync).mockImplementation(() => ({
+      isFIFO: (): boolean => false,
+      isSocket: (): boolean => false,
+    }) as unknown as ReturnType<typeof fstatSync>)
+    const ctx = new Context()
+    const server = {
+      carrier: 'stdio' as const,
+      host: '127.0.0.1',
+      registerFallback: () => () => {},
+      applyIndexTaps: (html: string): string => html,
+    } as unknown as WebServer
+    ctx.provide('webServer', server)
+    try {
+      apply(ctx, new Config({ openBrowser: false, printUrl: false, surfaceContext: false, trustedHosts: [] }))
+      expect.unreachable('non-pipe fds must fail loud')
+    } catch (error) {
+      expect((error as Error).message).toMatch(/supervising parent that owns pipe fds/u)
+    }
+  })
+
   it('resolves the real built frontend dist through the package exports, failing loud unbuilt', () => {
     // The production resolver (not the test hook). A built checkout resolves
     // the frontend package's index.html; a dist-less one (the CI coverage

@@ -47,14 +47,19 @@ export interface DesktopCarrierStream {
 export interface DesktopCarrierBridge {
   /**
    * Forward one unary request. Transport failures reject; business errors
-   * arrive as HTTP 200 envelopes per the wire contract.
+   * arrive as HTTP 200 envelopes per the wire contract. `token` correlates
+   * the call with {@link DesktopCarrierBridge.abortFetch} — the caller's
+   * `AbortSignal` never crosses this surface (contextBridge strips
+   * prototypes), only an opaque string does.
    */
   fetch(path: string, init: {
     method: string
     body?: string
     headers?: Record<string, string>
-    signal?: AbortSignal
+    token?: string
   }): Promise<{ status: number; body: string }>
+  /** Abort the in-flight fetch carrying `token`; unknown tokens are no-ops. */
+  abortFetch(token: string): void
   /** Open one downstream event stream for an absolute events path. */
   openStream(path: string): DesktopCarrierStream
   /**
@@ -63,6 +68,39 @@ export interface DesktopCarrierBridge {
    * and callers fall back to the Host's OS-chooser RPC.
    */
   pickDirectory?: () => Promise<string | null>
+}
+
+/**
+ * The abort wiring {@link bindAbortToken} hands back: the correlation token
+ * to send with the request, and a settle hook removing the listener once the
+ * call finishes.
+ */
+interface AbortGate {
+  token?: string | undefined
+  settle(): void
+}
+
+/**
+ * Bind one renderer-world `AbortSignal` to the bridge's abort channel.
+ *
+ * The signal object itself must never cross the bridge: contextBridge hands
+ * the preload a prototype-less clone, so `addEventListener` disappears there
+ * (the production failure behind "init.signal.addEventListener is not a
+ * function"). The renderer keeps the live signal, generates a correlation
+ * token, and forwards only that token; the shell maps it to its own
+ * AbortController.
+ * @param bridge - the injected desktop carrier bridge.
+ * @param signal - the caller's cancellation signal, when one exists.
+ * @returns the token to send with the request, and a settle hook removing the listener.
+ * @throws {Error} immediately when the signal is already aborted.
+ */
+export function bindAbortToken(bridge: DesktopCarrierBridge, signal?: AbortSignal): AbortGate {
+  if (signal === undefined) return { settle(): void {} }
+  if (signal.aborted) throw new Error('This operation was aborted')
+  const token = randomUuid()
+  const onAbort = (): void => { bridge.abortFetch(token) }
+  signal.addEventListener('abort', onAbort, { once: true })
+  return { token, settle: (): void => { signal.removeEventListener('abort', onAbort) } }
 }
 
 /** The global seat name the desktop preload populates. */
@@ -104,18 +142,21 @@ export class DesktopIpcApiClient extends AbstractApiClient {
     } else if (init?.headers !== undefined) {
       Object.assign(headers, init.headers)
     }
-    const response = await this.#bridge.fetch(`${input.pathname}${input.search}`, {
-      method: init?.method ?? 'GET',
-      ...(typeof init?.body === 'string' ? { body: init.body } : {}),
-      headers,
-      // DOM `RequestInit.signal` also carries `null`; the bridge seat accepts
-      // only `AbortSignal`, so both absences omit the property.
-      ...(init?.signal == null ? {} : { signal: init.signal }),
-    })
-    return new Response(response.body, {
-      status: response.status,
-      headers: { 'content-type': 'application/json' },
-    })
+    const gate = bindAbortToken(this.#bridge, init?.signal ?? undefined)
+    try {
+      const response = await this.#bridge.fetch(`${input.pathname}${input.search}`, {
+        method: init?.method ?? 'GET',
+        ...(typeof init?.body === 'string' ? { body: init.body } : {}),
+        headers,
+        ...(gate.token === undefined ? {} : { token: gate.token }),
+      })
+      return new Response(response.body, {
+        status: response.status,
+        headers: { 'content-type': 'application/json' },
+      })
+    } finally {
+      gate.settle()
+    }
   }
 
   protected override openMux(
@@ -206,20 +247,25 @@ export function createDesktopConnectionRpc(bridge: DesktopCarrierBridge): Client
         method: endpoint,
         payload,
       }
-      const response = await bridge.fetch(`/connection${channel}/${endpoint}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(message),
-        ...(signal === undefined ? {} : { signal }),
-      })
-      if (response.status !== 200) {
-        throw new Error(`transport failure for ${channel}/${endpoint}: HTTP ${String(response.status)}`)
+      const gate = bindAbortToken(bridge, signal)
+      try {
+        const response = await bridge.fetch(`/connection${channel}/${endpoint}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(message),
+          ...(gate.token === undefined ? {} : { token: gate.token }),
+        })
+        if (response.status !== 200) {
+          throw new Error(`transport failure for ${channel}/${endpoint}: HTTP ${String(response.status)}`)
+        }
+        const full = serverResponseSchema.parse(JSON.parse(response.body))
+        if (full.rpcId !== rpcId) {
+          throw new Error(`rpcId mismatch for ${endpoint}: sent ${rpcId}, got ${full.rpcId}`)
+        }
+        return full.result
+      } finally {
+        gate.settle()
       }
-      const full = serverResponseSchema.parse(JSON.parse(response.body))
-      if (full.rpcId !== rpcId) {
-        throw new Error(`rpcId mismatch for ${endpoint}: sent ${rpcId}, got ${full.rpcId}`)
-      }
-      return full.result
     },
   }
 }

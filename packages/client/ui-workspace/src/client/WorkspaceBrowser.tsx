@@ -385,10 +385,12 @@ function SessionTree({
   return (
     <div className={clsx(css.treeBody, css.wide)}>
       {workspaceDropAtListStart && <span className={css.listTopDropIndicator} aria-hidden="true" />}
+      {/* role=tree requires owned treeitem children; an empty hint is not
+          one, so the container keeps the label but drops the tree role while
+          it shows only the empty state. */}
       <div
         className={clsx(css.list, workspaceDropAtListStart && css.listTopDropActive)}
-        role="tree"
-        aria-label={t('section.sessions')}
+        {...(groups.length === 0 ? {} : { role: 'tree' as const, 'aria-label': t('section.sessions') })}
       >
         {groups.length === 0 && (
           <div className={css.empty}>{t('empty.none')}</div>
@@ -619,7 +621,12 @@ function FlatList({
   const now = Date.now()
   return (
     <div className={clsx(css.treeBody, css.wide)}>
-      <div className={clsx(css.list, css.flatList)} role="tree" aria-label={t('section.sessions')}>
+      {/* Same empty-state rule as the grouped tree: no tree role without
+          treeitem children. */}
+      <div
+        className={clsx(css.list, css.flatList)}
+        {...(rows.length === 0 ? {} : { role: 'tree' as const, 'aria-label': t('section.sessions') })}
+      >
         {rows.length === 0 && (
           <div className={css.empty}>{t('empty.none')}</div>
         )}
@@ -703,7 +710,10 @@ function SearchResults({
   return (
     <div className={clsx(css.treeBody, css.wide)}>
       <div className={css.list}>
-        <div className={css.searchTree} role="tree" aria-label={t('search.results.aria')}>
+        <div
+          className={css.searchTree}
+          {...(results.items.length === 0 ? {} : { role: 'tree' as const, 'aria-label': t('search.results.aria') })}
+        >
           {results.items.map(result => (
             <SearchResultItem
               key={result.id}
