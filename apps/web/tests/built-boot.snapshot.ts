@@ -32,6 +32,11 @@ const clientBuildEnvironment: unknown = Reflect.get(record, 'environment')
 if (typeof clientBuildEnvironment !== 'object' || clientBuildEnvironment === null) {
   throw new TypeError('client build record environment must be an object')
 }
+// The artifacts were digested against exactly this environment (readClientBuildRecord
+// verified the digest), so the recorded profile is the truth this smoke must
+// see painted: official folds the brand guard to the wordmark, any other
+// record keeps the official plugin inert behind the shell fallbacks.
+const officialBrandProfile = Reflect.get(clientBuildEnvironment, 'DSH_CLIENT_BUILD_PROFILE') === 'official'
 
 function isBuildRecordReader(value: unknown): value is (root: string) => unknown {
   return typeof value === 'function'
@@ -42,8 +47,16 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
 
   // The sidebar renders from the boot graph: every inject layer activated.
   const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
-  expect(document.querySelector('svg[viewBox="26 0 156 24"]')).not.toBeNull()
-  expect(screen.queryByText('DSH Local Build')).toBeNull()
+  // Brand face follows the recorded build profile (the define folding is the
+  // built-artifact fact under test): official shows the wordmark and no
+  // fallback label; a local-profile record shows the inverse.
+  if (officialBrandProfile) {
+    expect(document.querySelector('svg[viewBox="26 0 156 24"]')).not.toBeNull()
+    expect(screen.queryByText('DSH Local Build')).toBeNull()
+  } else {
+    expect(document.querySelector('svg[viewBox="26 0 156 24"]')).toBeNull()
+    screen.getByText('DSH Local Build')
+  }
   // The compact layout dropped group session counts; the fixture workspace
   // group row renders immediately with its sessions beneath it.
   const fixtureGroup = (await within(tree).findAllByText('fixture'))
