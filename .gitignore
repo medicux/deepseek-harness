@@ -45,3 +45,4 @@ apps/desktop/test-results/
 worktrees/
 .agents/worktrees/
 .typert-*/
+test-results
