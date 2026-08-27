@@ -156,7 +156,7 @@ describe('web e2e: startup auto-selection', () => {
     expect(await page.locator('textarea').first().isVisible()).toBe(true)
 
     releaseHistory()
-    await page.locator('textarea:enabled[placeholder="Describe what you want to build"]')
+    await page.locator('textarea:enabled[placeholder="Describe what you want to build. Type / for commands, @ to mention an agent"]')
       .waitFor({ timeout: 15_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningsBefore)
 

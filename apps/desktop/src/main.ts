@@ -94,12 +94,55 @@ function resolveReadyTimeoutMs(): number {
  * product: without them macOS never delivers Cmd+C/Cmd+V into the composer,
  * which would silently break paste. View roles keep reload and DevTools
  * reachable during development; nothing here is desktop-only product surface.
+ *
+ * The "Settings…" item on darwin is the system-wide macOS convention: the
+ * app menu (under the app name) gains a `Cmd+,` accelerator that opens
+ * preferences. The click forwards to the focused window's renderer, where
+ * SettingsRoot listens for the resulting `dsh-desktop:open-settings` event.
  */
 function installMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
+    ...(process.platform === 'darwin' ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' as const },
+        { type: 'separator' as const },
+        {
+          label: 'Settings…',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => { window?.webContents.send('dsh-desktop:open-settings') },
+        },
+        { type: 'separator' as const },
+        { role: 'services' as const },
+        { type: 'separator' as const },
+        { role: 'hide' as const },
+        { role: 'hideOthers' as const },
+        { role: 'unhide' as const },
+        { type: 'separator' as const },
+        { role: 'quit' as const },
+      ],
+    }] : []),
     { role: 'fileMenu' },
-    { role: 'editMenu' },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(process.platform === 'darwin' ? [{ role: 'pasteAndMatchStyle' }] : []),
+        { role: 'delete' },
+        { role: 'selectAll' },
+        { type: 'separator' },
+        {
+          label: 'Settings…',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => { window?.webContents.send('dsh-desktop:open-settings') },
+        },
+      ],
+    },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
   ]))

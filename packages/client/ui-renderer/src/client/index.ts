@@ -10,6 +10,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import { createSlotRenderer } from './scoped-slots.tsx'
 import { buildRenderApp } from './app.tsx'
+import { createStatusAnnouncer } from './StatusLiveRegion.tsx'
 
 /** Selector hook over a session's conversation snapshot. */
 export type UseSession<Snap extends object = object> = SnapshotSelectorHook<Snap>
@@ -77,6 +78,12 @@ function mountApp(container: HTMLElement, app: () => ReactNode): Root {
  */
 export function apply(ctx: Context): void {
   ctx.slots.install(createSlotRenderer())
+  const announcer = createStatusAnnouncer()
+  ctx.reflect.provide('statusAnnounce', announcer)
+  // Route the most user-visible lifecycle signal — a carrier reconnect — into
+  // the polite live region. Other plugins can read `ctx.statusAnnounce` to
+  // add their own announcements.
+  ctx.on('connection/reset', () => { announcer.announce('Reconnected to server') })
   ctx.reflect.provide('uiRenderer', {
     mount: (container: HTMLElement): (() => void) => {
       const root = mountApp(container, buildRenderApp({ ctx }))

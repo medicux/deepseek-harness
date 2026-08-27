@@ -61,15 +61,16 @@
   border-right: none;
 }
 
-/* Drag handles are frame children (columns clip overflow): an 8px hit strip
-   centered on the column border via inline left, above column content. Details
-   adds a visible 12x32 pill at vertical center; sidebar keeps only the hit strip. */
+/* Drag handles are frame children (columns clip overflow): a 12px hit strip
+   centered on the column border via inline left, above column content. The
+   sidebar handle was 8px — too narrow to grab — so all three handles now
+   share the wider hit strip and the same hover-pill affordance. */
 .handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 8px;
-  margin-left: -4px;
+  width: 12px;
+  margin-left: -6px;
   cursor: col-resize;
   z-index: 2;
   touch-action: none;
@@ -88,10 +89,14 @@
   }
 }
 
-/* Column pills: one affordance shared by both resizable boundaries. Each pill
-   hides until the pointer is over its column, the strip itself, or a drag. */
+/* Column pills: one affordance shared by all three resizable boundaries. Each
+   pill hides until the pointer is over its column, the strip itself, or a
+   drag. The sidebar handle used to skip the pill and rely on its 8px hit
+   strip alone — too easy to miss. The hover pill and the 12px hit strip are
+   now the same for every handle. */
 .handle[data-side='details']::after,
-.handle[data-side='workbench']::after {
+.handle[data-side='workbench']::after,
+.handle[data-side='sidebar']::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -114,14 +119,19 @@
 .handle[data-side='details'][data-dragging='true']::after,
 .workbenchCol:hover ~ .handle[data-side='workbench']::after,
 .handle[data-side='workbench']:hover::after,
-.handle[data-side='workbench'][data-dragging='true']::after {
+.handle[data-side='workbench'][data-dragging='true']::after,
+.sidebarCol:hover ~ .handle[data-side='sidebar']::after,
+.handle[data-side='sidebar']:hover::after,
+.handle[data-side='sidebar'][data-dragging='true']::after {
   opacity: 1;
 }
 
 .handle[data-side='details']:hover::after,
 .handle[data-side='details'][data-dragging='true']::after,
 .handle[data-side='workbench']:hover::after,
-.handle[data-side='workbench'][data-dragging='true']::after {
+.handle[data-side='workbench'][data-dragging='true']::after,
+.handle[data-side='sidebar']:hover::after,
+.handle[data-side='sidebar'][data-dragging='true']::after {
   background: var(--dsw-alias-button-floating-hover);
   border-color: var(--dsw-alias-border-l3);
 }

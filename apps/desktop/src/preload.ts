@@ -14,6 +14,15 @@ contextBridge.exposeInMainWorld('dshDesktop', {
   minimize: (): void => { ipcRenderer.send('dsh-desktop:window', 'minimize') },
   toggleMaximize: (): void => { ipcRenderer.send('dsh-desktop:window', 'toggle-maximize') },
   close: (): void => { ipcRenderer.send('dsh-desktop:window', 'close') },
+  // Main-process menu (e.g. the macOS Settings… item with Cmd+,) sends
+  // `dsh-desktop:open-settings` via webContents. The renderer subscribes
+  // here and re-fires as a DOM CustomEvent so the settings shell can listen
+  // without importing the preload module.
+  onOpenSettings(callback: () => void): () => void {
+    const listener = (): void => { callback() }
+    ipcRenderer.on('dsh-desktop:open-settings', listener)
+    return () => { ipcRenderer.removeListener('dsh-desktop:open-settings', listener) }
+  },
 })
 
 let fetchToken = 0

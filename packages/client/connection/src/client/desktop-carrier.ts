@@ -249,7 +249,7 @@ export function createDesktopConnectionRpc(bridge: DesktopCarrierBridge): Client
       }
       const gate = bindAbortToken(bridge, signal)
       try {
-        const response = await bridge.fetch(`/connection${channel}/${endpoint}`, {
+        const response = await bridge.fetch(`${channel}/${endpoint}`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(message),

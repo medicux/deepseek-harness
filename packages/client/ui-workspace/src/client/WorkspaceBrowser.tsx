@@ -394,7 +394,7 @@ function SessionTree({
         {...(groups.length === 0 ? {} : { role: 'tree' as const })}
       >
         {groups.length === 0 && (
-          <div className={css.empty}>{t('empty.none')}</div>
+          <div className={css.empty} role="treeitem" aria-disabled="true">{t('empty.none')}</div>
         )}
         {groups.map((group) => {
           const workspaceId = group.workspaceId
@@ -630,7 +630,7 @@ function FlatList({
         {...(rows.length === 0 ? {} : { role: 'tree' as const })}
       >
         {rows.length === 0 && (
-          <div className={css.empty}>{t('empty.none')}</div>
+          <div className={css.empty} role="treeitem" aria-disabled="true">{t('empty.none')}</div>
         )}
         {rows.map((node) => {
           const active = drag !== null

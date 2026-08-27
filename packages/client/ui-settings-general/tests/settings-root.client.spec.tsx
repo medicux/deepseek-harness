@@ -162,11 +162,13 @@ describe('SettingsPanel close paths', () => {
 })
 
 describe('SettingsPanel navigation', () => {
-  it('projects rows, marks the first active, and renders only that section', () => {
+  it('projects rows, marks the first active tab, and renders only that section', () => {
     mount()
     openPanel()
-    expect(screen.getByRole('button', { name: 'General' }).getAttribute('aria-current')).toBe('true')
-    expect(screen.getByRole('button', { name: 'Models' }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('tab', { name: 'General' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: 'Models' }).getAttribute('aria-selected')).toBe('false')
+    expect(screen.getByRole('tab', { name: 'General' }).getAttribute('tabindex')).toBe('0')
+    expect(screen.getByRole('tab', { name: 'Models' }).getAttribute('tabindex')).toBe('-1')
     expect(screen.getByTestId('section-general')).toBeTruthy()
   })
 
@@ -183,7 +185,7 @@ describe('SettingsPanel navigation', () => {
     openPanel()
     // Glyphs carry no id of their own, so the drawn paths are what tells them apart.
     const glyphs = ['General', 'Models', 'Agent presets', 'Plugins', 'Contributed']
-      .map(name => screen.getByRole('button', { name }).querySelector('svg')?.innerHTML)
+      .map(name => screen.getByRole('tab', { name }).querySelector('svg')?.innerHTML)
 
     expect(glyphs.every(glyph => glyph !== undefined && glyph !== '')).toBe(true)
     // The three ids the shell names get their own glyph; every other section —
@@ -195,10 +197,35 @@ describe('SettingsPanel navigation', () => {
   it('switches the rendered section on nav click', () => {
     mount()
     openPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Models' }))
-    expect(screen.getByRole('button', { name: 'Models' }).getAttribute('aria-current')).toBe('true')
+    fireEvent.click(screen.getByRole('tab', { name: 'Models' }))
+    expect(screen.getByRole('tab', { name: 'Models' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByTestId('section-models')).toBeTruthy()
     expect(screen.queryByTestId('section-general')).toBeNull()
+  })
+
+  it('moves selection with Arrow keys (roving tabindex, wraps, and refocuses)', () => {
+    mount({
+      rows: [
+        { id: 'general', order: 0, label: 'General' },
+        { id: 'models', order: 10, label: 'Models' },
+        { id: 'agent-presets', order: 20, label: 'Agent presets' },
+        { id: 'contributed', order: 40, label: 'Contributed' },
+      ],
+    })
+    openPanel()
+    fireEvent.keyDown(document, { key: 'ArrowRight' })
+    expect(screen.getByRole('tab', { name: 'Models' }).getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Models' }))
+    expect(screen.getByTestId('section-models')).toBeTruthy()
+    // Walk to the end and wrap past the last tab back to the first.
+    fireEvent.keyDown(document, { key: 'ArrowRight' })
+    fireEvent.keyDown(document, { key: 'ArrowRight' })
+    expect(screen.getByRole('tab', { name: 'Contributed' }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.keyDown(document, { key: 'ArrowRight' })
+    expect(screen.getByRole('tab', { name: 'General' }).getAttribute('aria-selected')).toBe('true')
+    // Left wraps backward from the first tab to the last.
+    fireEvent.keyDown(document, { key: 'ArrowLeft' })
+    expect(screen.getByRole('tab', { name: 'Contributed' }).getAttribute('aria-selected')).toBe('true')
   })
 
   it('mounts onboarding steps in order and transfers ownership only on completion', () => {
@@ -246,9 +273,9 @@ describe('SettingsPanel navigation', () => {
   it('falls back to the first row when the active entry unregisters', () => {
     const { bump } = mount()
     openPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Models' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Models' }))
     bump([{ id: 'general', order: 0, label: 'General' }])
-    expect(screen.queryByRole('button', { name: 'Models' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Models' })).toBeNull()
     expect(screen.getByTestId('section-general')).toBeTruthy()
   })
 

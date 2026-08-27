@@ -152,7 +152,7 @@ export function Tooltip({ label, side = 'right', delayMs = 0, disabled = false, 
         onFocus: (e) => { children.props.onFocus?.(e); triggers.current.focus = true; cancelShow(); show() },
         onBlur: (e) => { children.props.onBlur?.(e); triggers.current.focus = false; hide() },
       })}
-      {pos !== null && (
+      {pos !== null && !disabled && (
         <span
           ref={bubble}
           className={css.bubble}

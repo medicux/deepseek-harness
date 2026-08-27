@@ -29,7 +29,7 @@
   - img
   - text: Standard mode
   - img
-- textbox "Describe what you want to build"
+- textbox "Describe what you want to build. Type / for commands, @ to mention an agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
