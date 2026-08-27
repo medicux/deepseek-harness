@@ -54,27 +54,29 @@ test('drops the brand row below the traffic lights and keeps the top edge a drag
   expect(Number.parseInt(brandPadding ?? '0', 10)).toBeGreaterThanOrEqual(36)
 
   // The injected top strip spans the whole window top, including over the
-  // non-sidebar columns, carries the app-region drag style, and those pixels
-  // hit the strip itself. (Playwright's synthetic mouse events cannot drive
-  // macOS window dragging — Chromium handles app-region grabs on the native
-  // input path — so the mechanism, not a bounds delta, is what's asserted.)
+  // non-sidebar columns, carries the app-region drag style, and lets clicks
+  // pass through to whatever chrome sits in that band via pointer-events:none.
+  // Playwright's synthetic mouse events cannot drive macOS window dragging —
+  // Chromium handles app-region grabs on the native input path — so the
+  // mechanism, not a bounds delta, is what's asserted. (elementFromPoint
+  // intentionally no longer reports the strip, since click passthrough is
+  // the whole point of the wider drag region.)
   const stripProbe = await page.evaluate(() => {
     const strip = document.getElementById('dsh-desktop-top-strip')
     if (strip === null) return null
     const rect = strip.getBoundingClientRect()
-    const probeX = Math.round(rect.width * 0.7)
-    const overCenter = document.elementFromPoint(probeX, Math.max(0, Math.round(rect.height / 2)))
+    const cs = getComputedStyle(strip)
     return {
       height: rect.height,
       coversViewportWidth: Math.abs(rect.width - window.innerWidth) < 1,
-      appRegion: (getComputedStyle(strip) as CSSStyleDeclaration & { webkitAppRegion?: string }).webkitAppRegion,
-      hitAtTopCenter: overCenter?.id === 'dsh-desktop-top-strip',
+      appRegion: (cs as CSSStyleDeclaration & { webkitAppRegion?: string }).webkitAppRegion,
+      pointerEvents: cs.pointerEvents,
     }
   })
   expect(stripProbe).not.toBeNull()
   expect(stripProbe?.coversViewportWidth).toBe(true)
   expect(stripProbe?.appRegion).toBe('drag')
-  expect(stripProbe?.hitAtTopCenter).toBe(true)
+  expect(stripProbe?.pointerEvents).toBe('none')
 
   // A marked client header drags wherever one is mounted; a blank-hero boot
   // renders none, and the injected strip owns dragging in that state.

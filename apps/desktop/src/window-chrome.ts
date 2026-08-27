@@ -137,11 +137,13 @@ export const DESKTOP_TOP_STRIP_ID = 'dsh-desktop-top-strip'
  *   itself, so the new air is draggable exactly where it renders. The
  *   collapsed rail keeps its own tighter spacing (its two-class rule
  *   outranks this attribute selector).
- * - A 12px transparent edge across the whole window top is a drag region, so
- *   grabbing the very top of any column drags the window even while the
- *   session header is hidden (blank hero). It stays above every control's
- *   clickable area: the tallest chrome that starts at y=0 is the sidebar
- *   brand row, which drags through its own padding instead.
+ * - A 30px transparent edge across the whole window top is a drag region, so
+ *   grabbing the top of any column drags the window even while the session
+ *   header is hidden (blank hero). `pointer-events: none` lets clicks reach
+ *   any control that happens to sit in that band (e.g. the session header's
+ *   model selector and breadcrumbs); Chromium handles the app-region drag
+ *   off the browser-level hit test, so this does not block native drag.
+ *   The strip hides in fullscreen like the rest of the chrome.
  */
 export const TOP_STRIP_CSS = `
 /* !important: the shell owns this chrome and must win over any client-side
@@ -152,8 +154,9 @@ export const TOP_STRIP_CSS = `
   top: 0;
   left: 0;
   right: 0;
-  height: 12px;
+  height: 30px;
   -webkit-app-region: drag;
+  pointer-events: none;
   z-index: 2147483646;
 }
 body:fullscreen #${DESKTOP_TOP_STRIP_ID} { display: none; }
