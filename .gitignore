@@ -35,6 +35,8 @@ apps/web/dist/
 # electron-builder artifacts (see apps/desktop/scripts/package-desktop.ts).
 apps/desktop/dist-closure/
 apps/desktop/dist-packages/
+# Playwright run artifacts (screenshots/diffs on failure); baselines stay in qa/snapshots/.
+apps/desktop/test-results/
 .artifacts/
 .dsh-build/
 .playwright-mcp/

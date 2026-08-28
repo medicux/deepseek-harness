@@ -639,12 +639,14 @@
         "src/main.ts",
         "src/preload.ts",
         "scripts/**/*.ts",
-        "tests/**/*.spec.ts"
+        "tests/**/*.spec.ts",
+        "qa/**/*.ts"
       ],
       "project": [
         "src/**/*.ts",
         "scripts/**/*.ts",
-        "tests/**/*.ts"
+        "tests/**/*.ts",
+        "qa/**/*.ts"
       ],
       "ignoreDependencies": [
         "electron-builder",

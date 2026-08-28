@@ -138,7 +138,11 @@ export function apply(ctx: Context): void {
   }
   const handle: ConnectionHandle = {
     api,
-    isLoopback: pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    // The desktop shell's renderer origin is `dsh://app`, which is no network
+    // host at all: the IPC carrier is same-machine by construction, so the
+    // desktop counts as loopback for every client-side local/remote decision
+    // (settings persistence, deliverable file links, document controller).
+    isLoopback: pageLocation === undefined || desktopBridge !== undefined || isLoopbackHostname(pageLocation.hostname),
     hostDescription: {
       getSnapshot: () => description,
       subscribe: (listener) => {

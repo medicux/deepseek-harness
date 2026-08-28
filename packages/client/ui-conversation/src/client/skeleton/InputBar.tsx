@@ -741,6 +741,11 @@ export function InputBar({
               disabled={textareaDisabled}
               readOnly={machineBusy || workspaceTrigger}
               data-testid="composer-input"
+              // In the no-workspace hero the readonly textarea doubles as the
+              // picker trigger; a textbox role forbids aria-haspopup and
+              // aria-expanded, so it exposes button semantics while it acts
+              // as one.
+              role={workspaceTrigger ? 'button' : undefined}
               aria-label={workspaceTrigger ? t('hero.chooseWorkspace') : undefined}
               aria-haspopup={workspaceTrigger ? 'menu' : undefined}
               aria-expanded={workspaceTrigger ? workspacePickerOpen : undefined}

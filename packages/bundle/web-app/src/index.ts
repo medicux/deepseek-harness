@@ -240,7 +240,11 @@ export function apply(ctx: Context, config: Config): void {
     // a hung surface out — so the requirement fails loud at mount.
     const describeFd = (fd: number): string => {
       try {
-        return fstatSync(fd).isFIFO() ? 'a pipe' : 'not a pipe'
+        // A supervisor hands over libuv pipe ends, which fstat reports as a
+        // FIFO (pipe2) or an AF_UNIX socket (the socketpair behind spawned
+        // stdio pipes on POSIX); anything else cannot carry the frames.
+        const stats = fstatSync(fd)
+        return stats.isFIFO() || stats.isSocket() ? 'a pipe' : 'not a pipe'
       } catch {
         return 'closed'
       }

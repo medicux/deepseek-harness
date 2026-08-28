@@ -323,7 +323,9 @@ describe('ConversationRoot resident composer', () => {
       summaryBlank: true,
       composerBlock: { reason: 'select a model first' },
     })
-    const box = b.view.getByRole('textbox') as HTMLTextAreaElement
+    // The no-workspace textarea exposes button semantics (it opens the
+    // picker), so the query targets the element, not a textbox role.
+    const box = b.view.getByTestId('composer-input') as HTMLTextAreaElement
     expect(box.disabled).toBe(false)
     expect(box.readOnly).toBe(true)
     expect(box.getAttribute('aria-haspopup')).toBe('menu')

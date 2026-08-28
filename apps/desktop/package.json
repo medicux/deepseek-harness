@@ -21,7 +21,10 @@
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",
     "electron": "^43.0.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "@playwright/test": "^1.61.1",
+    "playwright": "^1.61.1",
+    "axe-core": "^4.13.0"
   },
   "files": [
     "lib/*.js",

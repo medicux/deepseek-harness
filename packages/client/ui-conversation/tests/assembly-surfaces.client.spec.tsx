@@ -99,10 +99,13 @@ describe('resident composer', () => {
     fireEvent.click(textarea!)
     expect(view.getByTestId('workspace-probe').textContent).toBe('true:0')
     expect(textarea!.getAttribute('aria-expanded')).toBe('true')
-    fireEvent.click(view.getByRole('button', { name: '选择工作区' }))
+    // The hero names two controls "选择工作区" — the chip and the composer
+    // trigger — so queries that mean the chip disambiguate to the first.
+    const chip = view.getAllByRole('button', { name: '选择工作区' })[0]!
+    fireEvent.click(chip)
     fireEvent.keyDown(textarea!, { key: 'Enter' })
     expect(view.getByTestId('workspace-probe').textContent).toBe('true:0')
-    expect(view.getByRole('button', { name: '选择工作区' })).toBeTruthy()
+    expect(view.getAllByRole('button', { name: '选择工作区' }).length).toBeGreaterThan(0)
     await runtime.dispose()
   })
 
@@ -128,7 +131,7 @@ describe('resident composer', () => {
     const scrollBody = view.container.querySelector('[data-conversation-scroll]')!
     const composerSeat = view.container.querySelector('[data-composer-seat]')!
     const textarea = view.container.querySelector('textarea')!
-    const workspaceChip = view.getByRole('button', { name: '选择工作区' })
+    const workspaceChip = view.getAllByRole('button', { name: '选择工作区' })[0]!
     const workspaceProbe = view.getByTestId('workspace-probe')
     expect(textarea.disabled).toBe(false)
     expect(textarea.readOnly).toBe(true)

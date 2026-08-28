@@ -238,6 +238,13 @@ void app.whenReady().then(async () => {
   }
 })
 
+// The single-instance lock and Chromium storage live under the userData dir;
+// an isolated launch (QA, second profile) redirects it before the lock is
+// requested so a parallel instance boots its own stack instead of focusing.
+const USER_DATA_ENV = 'DSH_DESKTOP_USER_DATA'
+const userDataOverride = process.env[USER_DATA_ENV]
+if (userDataOverride !== undefined && userDataOverride !== '') app.setPath('userData', userDataOverride)
+
 // A second launch means the user asked for the app again: surface the
 // existing window instead of booting a second harness stack.
 if (!app.requestSingleInstanceLock()) {
