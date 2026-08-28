@@ -11,7 +11,7 @@
  * default polite behavior would only read the changed suffix, which loses
  * context for short messages like "Connected" or "Session X").
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 /** Announcer service: write text into the polite live region. */
 export interface StatusAnnounceService {

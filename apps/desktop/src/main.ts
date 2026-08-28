@@ -101,48 +101,50 @@ function resolveReadyTimeoutMs(): number {
  * SettingsRoot listens for the resulting `dsh-desktop:open-settings` event.
  */
 function installMenu(): void {
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    ...(process.platform === 'darwin' ? [{
+  const openSettings = (): void => { window?.webContents.send('dsh-desktop:open-settings') }
+  // The app menu (macOS) and Edit menu (all platforms) each carry a
+  // `Cmd+,` Settings… item that forwards to the focused window's renderer.
+  // `MenuItemConstructorOptions` is a discriminated union where `role` and
+  // `label`/`click` are mutually exclusive, so the mixed array below must
+  // be typed as the union. The template accepts that union directly.
+  const appMenu: Electron.MenuItemConstructorOptions[] = process.platform === 'darwin'
+    ? [{
       label: app.name,
       submenu: [
-        { role: 'about' as const },
-        { type: 'separator' as const },
-        {
-          label: 'Settings…',
-          accelerator: 'CmdOrCtrl+,',
-          click: () => { window?.webContents.send('dsh-desktop:open-settings') },
-        },
-        { type: 'separator' as const },
-        { role: 'services' as const },
-        { type: 'separator' as const },
-        { role: 'hide' as const },
-        { role: 'hideOthers' as const },
-        { role: 'unhide' as const },
-        { type: 'separator' as const },
-        { role: 'quit' as const },
+        { role: 'about' },
+        { type: 'separator' },
+        { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: openSettings },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
       ],
-    }] : []),
+    }]
+    : []
+  const editMenu: Electron.MenuItemConstructorOptions[] = [{
+    label: 'Edit',
+    submenu: [
+      { role: 'undo' },
+      { role: 'redo' },
+      { type: 'separator' },
+      { role: 'cut' },
+      { role: 'copy' },
+      { role: 'paste' },
+      ...(process.platform === 'darwin' ? [{ role: 'pasteAndMatchStyle' as const }] : []),
+      { role: 'delete' },
+      { role: 'selectAll' },
+      { type: 'separator' },
+      { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: openSettings },
+    ],
+  }]
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...appMenu,
     { role: 'fileMenu' },
-    {
-      label: 'Edit',
-      submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        ...(process.platform === 'darwin' ? [{ role: 'pasteAndMatchStyle' }] : []),
-        { role: 'delete' },
-        { role: 'selectAll' },
-        { type: 'separator' },
-        {
-          label: 'Settings…',
-          accelerator: 'CmdOrCtrl+,',
-          click: () => { window?.webContents.send('dsh-desktop:open-settings') },
-        },
-      ],
-    },
+    ...editMenu,
     { role: 'viewMenu' },
     { role: 'windowMenu' },
   ]))
