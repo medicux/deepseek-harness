@@ -58,14 +58,11 @@ export function StatusLiveRegion({ announcer }: StatusLiveRegionProps): ReactNod
       data-dsh-status-live=""
       style={{
         position: 'absolute',
-        width: 1,
-        height: 1,
-        margin: -1,
-        padding: 0,
+        left: '-9999px',
+        top: 'auto',
+        width: '1px',
+        height: '1px',
         overflow: 'hidden',
-        clip: 'rect(0 0 0 0)',
-        whiteSpace: 'nowrap',
-        border: 0,
       }}
     >
       {announcer.current}

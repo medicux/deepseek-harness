@@ -1,6 +1,6 @@
 # Agent Note: Desktop shell visual and functional review — UX gaps, missing capabilities, and a prioritization
 
-Status: proposed
+Status: implemented
 
 English
 

@@ -385,13 +385,14 @@ function SessionTree({
   return (
     <div className={clsx(css.treeBody, css.wide)}>
       {workspaceDropAtListStart && <span className={css.listTopDropIndicator} aria-hidden="true" />}
-      {/* role=tree requires owned treeitem children; an empty hint is not
-          one, so the container keeps the label but drops the tree role while
-          it shows only the empty state. */}
+      {/* The empty hint is a disabled treeitem, so the container must keep
+          role=tree whether or not sessions exist. The tree role is what makes
+          the disabled treeitem valid (aria-required-parent); without the tree
+          role, the empty hint would be an orphan treeitem in the aria tree. */}
       <div
         className={clsx(css.list, workspaceDropAtListStart && css.listTopDropActive)}
+        role="tree"
         aria-label={t('section.sessions')}
-        {...(groups.length === 0 ? {} : { role: 'tree' as const })}
       >
         {groups.length === 0 && (
           <div className={css.empty} role="treeitem" aria-disabled="true">{t('empty.none')}</div>
@@ -622,12 +623,10 @@ function FlatList({
   const now = Date.now()
   return (
     <div className={clsx(css.treeBody, css.wide)}>
-      {/* Same empty-state rule as the grouped tree: no tree role without
-          treeitem children. */}
       <div
         className={clsx(css.list, css.flatList)}
+        role="tree"
         aria-label={t('section.sessions')}
-        {...(rows.length === 0 ? {} : { role: 'tree' as const })}
       >
         {rows.length === 0 && (
           <div className={css.empty} role="treeitem" aria-disabled="true">{t('empty.none')}</div>

@@ -2,6 +2,7 @@
   "excluded": [
     ".agents/notes/AGENTS.md",
     ".agents/notes/implemented/bug-fix/2026-08-26-desktop-shell-carrier-chrome-and-loopback-defects.md",
+    ".agents/notes/implemented/process/2026-08-26-desktop-shell-review-and-priorities.md",
     ".agents/notes/implemented/testing/2026-08-25-web-lane-brand-face-and-golden-drift.md",
     ".agents/notes/implemented/AGENTS.md",
     ".agents/notes/implemented/CLAUDE.md",

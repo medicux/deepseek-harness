@@ -131,6 +131,42 @@ test('passes the WCAG 2.x A/AA axe gate on the settled shell', async () => {
   expect(summary).toEqual([])
 })
 
+test('exposes a polite live region, a tablist settings dialog, and a treeitem empty sidebar', async () => {
+  const { page } = desktop
+  // The polite live region is the only AT announcement channel; screen
+  // readers never see boot progress or connection resets without it.
+  const liveRegion = page.locator('[role="status"][aria-live="polite"]')
+  await expect(liveRegion).toHaveCount(1)
+
+  // Close any settings dialog left open by a prior test before re-opening.
+  // The earlier test exercises the dialog and Playwright's worker does not
+  // unmount the app between tests, so the trigger reflects its last state.
+  const openDialog = page.getByTestId('settings-dialog')
+  if (await openDialog.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape')
+    await expect(openDialog).toHaveCount(0)
+  }
+
+  // Settings dialog opens from the trigger and is a real tablist, not a
+  // button-in-nav (which screen readers cannot navigate with Tab/Arrow).
+  await page.getByTestId('settings-trigger').click()
+  const dialog = page.getByTestId('settings-dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('tablist')).toBeVisible()
+  const activeTab = dialog.getByRole('tab', { selected: true })
+  await expect(activeTab).toHaveCount(1)
+  // Roving tabindex: exactly one tab is the Tab stop, the rest are -1.
+  const rovingTabs = await dialog.getByRole('tab').evaluateAll(nodes =>
+    nodes.map(node => (node as HTMLElement).tabIndex))
+  expect(rovingTabs.filter(tabindex => tabindex === 0)).toHaveLength(1)
+  expect(rovingTabs.every(tabindex => tabindex === 0 || tabindex === -1)).toBe(true)
+
+  // The empty sidebar hint is exposed as a disabled treeitem so the tree
+  // structure is honest to AT even when no sessions exist.
+  const emptyHint = page.locator('[role="treeitem"][aria-disabled="true"]').first()
+  await expect(emptyHint).toBeVisible()
+})
+
 /** The slice of axe's run() result the gate reads. */
 interface AxeRunner {
   run: (context: Document, options: unknown) => Promise<{
