@@ -176,3 +176,22 @@ export function buildTopStripScript(): string {
   document.body.appendChild(strip)
 })()`
 }
+
+/**
+ * Open-in-system-browser policy for a target URL the app did not request.
+ * Only a parsed `http:` or `https:` URL is handed to the OS; every other
+ * scheme (including look-alikes like `https-evil:`) is rejected without an
+ * authority leak. Never `startsWith` on the raw string: it accepts any
+ * scheme that merely shares the prefix.
+ * @param target - the raw URL a `window.open` attempted.
+ * @returns true when the target is safe to hand to the platform browser.
+ */
+export function shouldOpenExternal(target: string): boolean {
+  let parsed: URL
+  try {
+    parsed = new URL(target)
+  } catch {
+    return false
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+}

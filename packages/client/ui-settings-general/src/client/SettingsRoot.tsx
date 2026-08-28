@@ -45,14 +45,29 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
   // projection falls back to the first row when the id is gone.
   const active = rows.find(r => r.id === activeId)?.id ?? rows[0]?.id
   const titleId = useId()
+  // Roving tabindex: the active tab is the only focusable tab; Arrow keys
+  // move focus and selection together, wrapping at either end.
+  const tabRefs = useRef(new Map<string, HTMLButtonElement>())
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+      const index = rows.findIndex(row => row.id === active)
+      if (index === -1) return
+      const delta = e.key === 'ArrowRight' ? 1 : -1
+      const next = rows[(index + delta + rows.length) % rows.length]
+      if (next === undefined) return
+      e.preventDefault()
+      onSelect(next.id)
+      tabRefs.current.get(next.id)?.focus()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => { document.removeEventListener('keydown', onKeyDown) }
-  }, [onClose])
+  }, [onClose, onSelect, rows, active])
 
   // Baseline focus management: entering the dialog lands on the close button.
   const closeButton = useRef<HTMLButtonElement | null>(null)
@@ -62,15 +77,23 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
     <div className={css.overlay} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
       <div className={css.panel} role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid="settings-dialog">
-        <nav className={css.nav}>
+        <nav className={css.nav} role="tablist" aria-label="Settings">
           <div className={css.navTitle} id={titleId}>{renderSlot('settings.header', {})}</div>
           <div className={css.navList}>
             {rows.map(row => (
               <button
                 key={row.id}
+                ref={(node) => {
+                  if (node === null) tabRefs.current.delete(row.id)
+                  else tabRefs.current.set(row.id, node)
+                }}
                 type="button"
+                role="tab"
+                id={`settings-tab-${row.id}`}
+                aria-controls={`settings-panel-${row.id}`}
+                aria-selected={row.id === active}
+                tabIndex={row.id === active ? 0 : -1}
                 className={clsx(css.navCell, row.id === active && css.active)}
-                aria-current={row.id === active ? 'true' : undefined}
                 onClick={() => { onSelect(row.id) }}
               >
                 {navIcon(row.id)}
@@ -88,7 +111,11 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
             </button>
           </div>
           <div className={css.options}>
-            {active !== undefined && renderSlot('settings.section', { close: onClose }, { only: active })}
+            {active !== undefined && (
+              <div role="tabpanel" id={`settings-panel-${active}`} aria-labelledby={`settings-tab-${active}`}>
+                {renderSlot('settings.section', { close: onClose }, { only: active })}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -113,6 +140,18 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   const openSection = useCallback((id: string) => {
     setActiveId(id)
     setOpen(true)
+  }, [])
+
+  // The desktop shell's main-process menu forwards Cmd+, to the renderer as a
+  // `dsh-desktop:open-settings` IPC; the preload re-fires it as a DOM event.
+  // The settings shell is the one always-mounted component with open state,
+  // so it subscribes here. The bridge is duck-typed so the web lane does not
+  // have to know about the preload module.
+  useEffect(() => {
+    const globalRef = globalThis as { dshDesktop?: { onOpenSettings?: (cb: () => void) => () => void } }
+    const subscribe = globalRef.dshDesktop?.onOpenSettings
+    if (subscribe === undefined) return undefined
+    return subscribe(() => { setOpen(true) })
   }, [])
 
   // The ledger tick keeps the nav rows fresh: registrants re-register with

@@ -349,7 +349,7 @@ describe('createDesktopConnectionRpc', () => {
     const rpc = createDesktopConnectionRpc(bridge)
     const result = await rpc.call('/test', 'echo', { hello: 1 })
     expect(result).toEqual({ ok: true, value: 'done' })
-    expect(seen[0]?.path).toBe('/connection/test/echo')
+    expect(seen[0]?.path).toBe('/test/echo')
   })
 
   it('rejects invalid targets before touching the bridge', async () => {

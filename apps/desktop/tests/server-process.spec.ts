@@ -164,6 +164,22 @@ describe('DshServerProcess', () => {
     expect(child.signalCode).toBe('SIGKILL')
   })
 
+  it('gives up reaping an unkillable child instead of hanging quit', async () => {
+    vi.useFakeTimers()
+    const { child, impl } = createFakeSpawn()
+    const { server } = start({ killGraceMs: 5 }, impl)
+    const pending = server.start()
+    child.write('stdout', 'dsh web: http://127.0.0.1:4314\n')
+    await pending
+    // The child never exits: SIGKILL cannot reap a process parked in an
+    // uninterruptible kernel wait, and stop() must not wait forever on it.
+    const stopping = server.stop()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(child.killCalls).toEqual(['SIGTERM', 'SIGKILL'])
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(stopping).resolves.toBeUndefined()
+  })
+
   it('stops gracefully within the grace period without escalating', async () => {
     const { child, impl } = createFakeSpawn()
     const { server } = start({ killGraceMs: 5 }, impl)
