@@ -5,7 +5,7 @@
  * Run: `tsx scripts/check-workspace-constraints.ts`.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { hasTypertRemoteNavigation, isForbiddenPublicationFile } from './publication-payload.ts'
@@ -54,16 +54,13 @@ const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
 const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'
 /** Directories whose packages this repository publishes: one release member each. */
 const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/[^/]+|vendor\/[^/]+)$/
-
 const localArtifactDirs = new Set(['node_modules'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
-  '@deepseek-ai/dsh': ['lib/*.js', 'config'],
-  // The Web build emits sourcemaps for browser debugging; publishing them is
-  // what the payload policy forbids, so the bundle ships without them.
-  '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],
-  // The desktop shell publishes its compiled main/preload entries; packaging
-  // into platform bundles happens from the published package, not the tree.
-  '@deepseek-ai/dsh-desktop': ['lib/*.js', 'lib/*.cjs', 'lib/types/**/*.d.ts'],
+  '@deepseek-ai/dsh': ['lib/*.js'],
+  // Sourcemaps stay out by payload policy; the worker-preview surface
+  // (dist/preview.html and dist/preview/) backs private experimental
+  // packages and is not published.
+  '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map', '!dist/preview.html', '!dist/preview'],
 }
 
 /** The subset of package.json fields this constraint check cares about. */
@@ -154,16 +151,26 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh-client-ui-theme': ['lib/styles'],
   // The CPython side ships as source .py files, published as-is rather than built.
   '@deepseek-ai/dsh-code-runtime-python': ['py/**/*.py'],
-  // The Python runtime uses a distinct closed-resolution bin; the public CLI
-  // keeps config-owned bare-package resolution through lib/bin.js.
-  '@deepseek-ai/dsh-sdk-jsonrpc-demo': ['lib/packaged-bin.js'],
+  // The shipped preset compositions travel inside the roster package.
+  '@deepseek-ai/dsh-agent-presets': ['presets'],
+  // The Web Host mounts the default-off settings owner independently of each
+  // Agent-scoped delegation-tool instance.
+  '@deepseek-ai/dsh-tool-subagent': ['lib/model-selection-settings.js'],
   // The argv-prefix runner entry ships beside the lib as its own bundle;
   // sandbox-local resolves it through the package's ./runner export. tsdown
   // also shares its generated FFI code through a hashed runtime chunk.
   '@deepseek-ai/dsh-sandbox-windows-acl': ['lib/runner.js', 'lib/types-*.js'],
-  // SQLite loads every statement from immutable package resources at runtime.
-  '@deepseek-ai/dsh-session-persistence-sqlite': ['resources/sql/**/*.sql'],
+  // SQLite loads its compression dictionary and every statement from immutable
+  // package resources at runtime.
+  '@deepseek-ai/dsh-session-persistence-sqlite': [
+    'resources/zstd-dictionary.bin',
+    'resources/sql/**/*.sql',
+  ],
   '@deepseek-ai/dsh-skill-badge': ['assets'],
+  // tsdown shares the repository/pack code between the lib entry and the bin
+  // through a hashed chunk. The committed bin.js is the link target pnpm can
+  // resolve at install time, before the build produces lib/bin.js.
+  '@deepseek-ai/dsh-experimental-webworker-packer': ['bin.js', 'lib/repository-*.js'],
   '@deepseek-ai/dsh-subprocess-local': ['scripts/ensure-spawn-helper.mjs'],
 }
 
@@ -171,7 +178,7 @@ function sameStringList(actual: readonly string[] | undefined, expected: readonl
   return !!actual && actual.length === expected.length && actual.every((value, index) => value === expected[index])
 }
 
-function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
+export function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
   const declaredPatch = manifest.dsh?.bundle?.patch
   const bundleFiles = declaredPatch === undefined ? [] : [declaredPatch.replace(/^\.\//, '')]
   const extras = [
@@ -184,10 +191,14 @@ function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
     // bundle; the package-invariant gate validates the companion itself.
     'lib/invariant.js',
     ...manifest.bin ? ['lib/bin.js'] : [],
-    ...manifest.exports?.['./worker'] ? ['lib/worker.cjs'] : [],
+    // Worker-thread packages ship a CJS worker entry; the browser worker
+    // bundle is an ES module a page loads with `new Worker(type: 'module')`.
+    // Keyed on the artifact path, like ./client below.
+    ...exportDefault(manifest, './worker') === './lib/worker.cjs' ? ['lib/worker.cjs'] : [],
+    ...exportDefault(manifest, './worker') === './lib/worker.js' ? ['lib/worker.js'] : [],
     // UI plugin packages ship their browser bundle beside the node lib
     // (single-artifact ruling: dist/ retired, ./client resolves lib/client.js).
-    // Keyed on the artifact path, not the subpath name: apiproxy's ./client is
+    // Keyed on the artifact path, not the subpath name: a package's ./client is
     // a browser-safe source channel, not a bundle.
     ...exportDefault(manifest, './client') === './lib/client.js' ? ['lib/client.js'] : [],
     // runtime's shell-held loader subpath ships as its own bundle beside the client half.
@@ -257,7 +268,12 @@ export function checkExperimentalManifest({ dir, manifest }: WorkspaceManifest):
   return errors
 }
 
-function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
+/**
+ * Check one workspace manifest against publication and dsh-package policy.
+ * @param workspace - package directory and parsed manifest.
+ * @returns path-qualified policy violations.
+ */
+export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): string[] {
   const errors = checkExperimentalManifest({ dir, manifest })
   const label = manifest.name ?? dir
   const isLandlockPackageDir = dir.startsWith('native/landlock-run/packages/')
@@ -385,38 +401,6 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
 }
 
 /**
- * Exact-key `paths` entries must target an existing entry file, never a
- * directory. The vitest source plane rewrites bare specifiers through this map
- * (vite-tsconfig-paths over tsconfig.base.json); a directory target can
- * silently skip the rewrite, dropping the import onto the built `lib/` bundle
- * whose inlined dependency copies split class identity across module graphs.
- * A missing target fails the same way. See the paths-entry-file Agent Note.
- */
-export function checkTsconfigPathsTargets(): string[] {
-  const raw = readFileSync(join(root, 'tsconfig.base.json'), 'utf8')
-    .split('\n')
-    .filter(line => !/^\s*\/\//u.test(line))
-    .join('\n')
-  const config = JSON.parse(raw) as { compilerOptions?: { paths?: Record<string, readonly string[]> } }
-  const paths = config.compilerOptions?.paths ?? {}
-  const errors: string[] = []
-  for (const [key, targets] of Object.entries(paths)) {
-    // Wildcard keys intentionally keep directory targets: their substitutions
-    // always name concrete files at the use site.
-    if (key.includes('*')) continue
-    for (const target of targets) {
-      const resolved = join(root, target)
-      if (!existsSync(resolved)) {
-        errors.push(`tsconfig.base.json paths["${key}"] → "${target}" does not exist; delete the dead entry or point it at the real entry file`)
-      } else if (statSync(resolved).isDirectory()) {
-        errors.push(`tsconfig.base.json paths["${key}"] → "${target}" is a directory; exact keys must target an entry file (e.g. "${target}/index.ts") so source-plane resolution stays deterministic`)
-      }
-    }
-  }
-  return errors
-}
-
-/**
  * Enforce `packages/<group>/<pkg>`: groups are open-named containers without a
  * package.json, and packages may be neither flat nor more deeply nested.
  */
@@ -510,11 +494,10 @@ export function main(): void {
   ]
   const errors = [
     ...checkRepositoryVersion(),
-    ...manifests.flatMap(checkWorkspace),
+    ...manifests.flatMap(checkWorkspaceManifest),
     ...checkWorkspaceProtocol(manifests),
     ...checkExperimentalDependencyIsolation(dependencyManifests),
     ...checkHierarchyShape(),
-    ...checkTsconfigPathsTargets(),
     ...collectProjectReferenceFaceViolations(root),
   ]
   if (errors.length > 0) {

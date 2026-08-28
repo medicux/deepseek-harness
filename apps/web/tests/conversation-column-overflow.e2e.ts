@@ -29,7 +29,7 @@ import { launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold } fr
 import { assertFixtureInventory, compareOrRefreshGolden } from './goldens.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/conversation-column-overflow', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/conversation-column-overflow', import.meta.url))
 /**
  * Committed golden of the one-axis relation at every stop. It records
  * relations and booleans, never absolute coordinates: the column width follows
@@ -206,7 +206,7 @@ describe('web e2e: the conversation column scrolls on one axis', () => {
     browser = await chromium.launch()
     page = await newEnglishPage(browser, 900)
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[data-conversation-scroll] [class*="heroGlow"]', { timeout: 30_000 })
   }, 180_000)
 

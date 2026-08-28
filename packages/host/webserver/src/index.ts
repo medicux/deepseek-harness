@@ -1,11 +1,9 @@
 /**
- * @deepseek-ai/dsh-host-webserver — Web route-registration plugin: a node:http
- * server plus the `webServer` service (HTTP and upgrade route registries, the
- * structured index injection table with raw transform taps behind it, and the
- * single fallback seat for everything no route claims). Knows no harness concepts and serves no files; the composing
- * application's frontend plugin owns dist serving through the fallback hook.
- * Web shape only — Electron loads dist over file:// and carries fetch over an
- * IPC bridge. This package never prints: the URL line belongs to the shell.
+ * @deepseek-ai/dsh-host-webserver — node:http route registration with optional
+ * gzip, index injection, and one fallback seat. It knows no harness concepts
+ * and serves no files; the composing application owns dist serving. Electron
+ * uses file:// plus IPC instead, and this package never prints the URL.
+ * Route handlers retain direct response ownership.
  */
 
 import { createServer } from 'node:http'
@@ -14,6 +12,8 @@ import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import compressionMiddleware from 'compression'
+import Negotiator from 'negotiator'
 import { renderIndexInjections, type IndexInjection } from './injections.ts'
 
 export { renderIndexInjections } from './injections.ts'
@@ -55,18 +55,63 @@ export interface WebUpgradeRoute {
   handler: (req: IncomingMessage, socket: Duplex, head: Buffer) => void | Promise<void>
 }
 
-/** Gateway config: the listen address and the delivery carrier. */
+/** Web server listen and response-compression config. */
 export interface Config {
-  /** Listen host; the two supported values are loopback and all-interfaces. TCP only. */
+  /** Listen host; the two supported values are loopback and all-interfaces. */
   host: '127.0.0.1' | '0.0.0.0'
-  /** Listen port; zero requests an OS-assigned port. TCP only. */
+  /** Listen port; zero requests an OS-assigned port. */
   port: number
-  /**
-   * Delivery carrier: `tcp` listens per host/port (the browser shape);
-   * `stdio` binds nothing — a supervisor drives the same dispatch through
-   * `serveStdio` over the child's pipes.
-   */
-  carrier: 'tcp' | 'stdio'
+  /** Response compression for socket-backed HTTP requests. @default 'none' */
+  compression?: 'none' | 'gzip'
+  /** Gzip DEFLATE level from 0 through 9. @default 1 */
+  compressionLevel?: number
+  /** Minimum known response length eligible for gzip; unknown-length streams are eligible. @default 1024 */
+  compressionThresholdBytes?: number
+}
+
+const DEFAULT_COMPRESSION = 'none' as const
+const DEFAULT_COMPRESSION_LEVEL = 1
+const DEFAULT_COMPRESSION_THRESHOLD_BYTES = 1024
+
+interface ResolvedConfig extends Config {
+  compression: 'none' | 'gzip'
+  compressionLevel: number
+  compressionThresholdBytes: number
+}
+
+type NodeMiddleware = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  next: () => void,
+) => void
+
+function createGzipMiddleware(config: ResolvedConfig): NodeMiddleware {
+  // `compression` is typed for Express, but its runtime uses only the
+  // node:http request and response members supplied here.
+  const middleware = compressionMiddleware({
+    level: config.compressionLevel,
+    threshold: config.compressionThresholdBytes,
+    filter(request, response) {
+      if (response.getHeader('content-range') !== undefined) return false
+      const contentType = response.getHeader('content-type')
+      if (typeof contentType === 'string' && contentType.toLowerCase().startsWith('text/event-stream')) return false
+      return compressionMiddleware.filter(request, response)
+    },
+  }) as unknown as NodeMiddleware
+
+  return (req, res, next) => {
+    // The Web Worker tunnel has no socket and transfers identity bytes.
+    if ((res as { socket?: unknown }).socket === undefined) {
+      next()
+      return
+    }
+    const encoding = new Negotiator(req).encoding(['gzip', 'identity'])
+    const gzipRequest = Object.create(req) as IncomingMessage
+    Object.defineProperty(gzipRequest, 'headers', {
+      value: { ...req.headers, 'accept-encoding': encoding === 'gzip' ? 'gzip' : 'identity' },
+    })
+    middleware(gzipRequest, res, next)
+  }
 }
 
 /**
@@ -78,9 +123,11 @@ export interface Config {
  */
 export class WebServer extends Service {
   static Config: z<Config> = z.object({
-    host: z.union([z.const('127.0.0.1'), z.const('0.0.0.0')]).default('127.0.0.1'),
-    port: z.natural().max(65535).default(0),
-    carrier: z.union([z.const('tcp'), z.const('stdio')]).default('tcp'),
+    host: z.union([z.const('127.0.0.1'), z.const('0.0.0.0')]).required(),
+    port: z.natural().max(65535).required(),
+    compression: z.union([z.const('none'), z.const('gzip')]).default(DEFAULT_COMPRESSION),
+    compressionLevel: z.number().step(1).min(0).max(9).default(DEFAULT_COMPRESSION_LEVEL),
+    compressionThresholdBytes: z.natural().default(DEFAULT_COMPRESSION_THRESHOLD_BYTES),
   })
 
   private readonly exact = new Map<string, WebRoute>()
@@ -89,32 +136,24 @@ export class WebServer extends Service {
   private readonly upgradedSockets = new Set<Duplex>()
   private readonly indexTaps: ((html: string) => string)[] = []
   private fallback: WebRoute['handler'] | undefined
-  private server?: Server
-  private listenedPort?: number
+  private server!: Server
+  private listenedPort!: number
+  private readonly gzip: NodeMiddleware | undefined
 
   constructor(ctx: Context, private config: Config) {
     super(ctx, 'webServer')
+    const resolved = config as ResolvedConfig
+    this.gzip = resolved.compression === 'gzip' ? createGzipMiddleware(resolved) : undefined
   }
 
-  /** The listening port; the OS-assigned value when config.port is 0. Stdio mode has none. */
+  /** The listening port (the OS-assigned value when config.port is 0). */
   get port(): number {
-    if (this.listenedPort === undefined) throw new Error('webserver: no TCP listener in stdio carrier mode')
     return this.listenedPort
   }
 
   /** The configured bind host (the loopback or all-interfaces literal). */
   get host(): Config['host'] {
     return this.config.host
-  }
-
-  /** The delivery carrier this instance was composed with. */
-  get carrier(): Config['carrier'] {
-    return this.config.carrier
-  }
-
-  /** Whether a TCP listener is currently bound (always false in stdio mode). */
-  get listening(): boolean {
-    return this.server?.listening ?? false
   }
 
   /**
@@ -139,12 +178,6 @@ export class WebServer extends Service {
    * @returns the disposer removing the route.
    */
   registerUpgrade(route: WebUpgradeRoute): () => void {
-    // Upgrade negotiation lives in the listener's 'upgrade' event; the stdio
-    // carrier has no socket, so such a registration could never answer — a
-    // composition mistake, not a runtime condition.
-    if (this.config.carrier === 'stdio') {
-      throw new Error(`webserver: upgrade route "${route.path}" cannot be served by the stdio carrier (no listening socket)`)
-    }
     if (this.upgrades.has(route.path)) {
       throw new Error(`webserver: duplicate upgrade route "${route.path}"`)
     }
@@ -183,52 +216,43 @@ export class WebServer extends Service {
     }
   }
 
-  /**
-   * Dispatch one request through the route tables and fallback seat. This is
-   * the transport-independent core: node:http and the stdio carrier both call
-   * it, so route owners see one request/response surface either way.
-   * @param req - incoming request (method, url, headers, body stream).
-   * @param res - response to own for the full lifecycle.
-   */
-  async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
-    requests; the field is only optional on the client-side IncomingMessage type */
-    const rawPath = new URL(req.url ?? '/', 'http://x').pathname
-    const route = this.match(rawPath)
-    if (route !== undefined) {
-      await route.handler(req, res)
-      return
-    }
-    const fallback = this.fallback
-    if (fallback === undefined) {
-      res.writeHead(404)
-      res.end()
-      return
-    }
-    await fallback(req, res)
-  }
-
-  /** Bind the TCP listener; resolves once the socket is bound (rejection = FAILED fiber).
-   * Stdio mode resolves without binding — the supervisor drives dispatch via serveStdio. */
+  /** Listen; resolves once the socket is bound (rejection = FAILED fiber). */
   async [Service.init](): Promise<void> {
-    if (this.config.carrier === 'stdio') return
     const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-      await this.handleRequest(req, res)
+      /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
+      requests; the field is only optional on the client-side IncomingMessage type */
+      const rawPath = new URL(req.url ?? '/', 'http://x').pathname
+      const route = this.match(rawPath)
+      if (route !== undefined) {
+        await route.handler(req, res)
+        return
+      }
+      const fallback = this.fallback
+      if (fallback === undefined) {
+        res.writeHead(404)
+        res.end()
+        return
+      }
+      await fallback(req, res)
     }
     // Last-resort guard: handle() rejecting would otherwise be an unhandled
     // rejection killing the process on one malformed request (bad %-escape,
     // client dropping mid-body). Per-request failures log and answer 400 —
     // never a process exit.
     this.server = createServer((req, res) => {
-      handle(req, res).catch((err: unknown) => {
-        this.ctx.logger.warn(err instanceof Error ? err : new Error(String(err)))
-        if (res.headersSent) {
-          res.destroy()
-          return
-        }
-        res.writeHead(400)
-        res.end()
-      })
+      const next = (): void => {
+        void handle(req, res).catch((err: unknown) => {
+          this.ctx.logger.warn(err instanceof Error ? err : new Error(String(err)))
+          if (res.headersSent) {
+            res.destroy()
+            return
+          }
+          res.writeHead(400)
+          res.end()
+        })
+      }
+      if (this.gzip === undefined) next()
+      else this.gzip(req, res, next)
     })
     this.server.on('upgrade', (req, socket, head) => {
       const onError = (error: Error): void => {
@@ -265,25 +289,23 @@ export class WebServer extends Service {
       }
     })
 
-    const bound = this.server
     await new Promise<void>((resolve, reject) => {
-      bound.once('error', reject)
-      bound.listen(this.config.port, this.config.host, () => {
-        bound.off('error', reject)
-        bound.on('error', (err) => { this.ctx.logger.error(err) })
-        this.listenedPort = (bound.address() as AddressInfo).port
+      this.server.once('error', reject)
+      this.server.listen(this.config.port, this.config.host, () => {
+        this.server.off('error', reject)
+        this.server.on('error', (err) => { this.ctx.logger.error(err) })
+        this.listenedPort = (this.server.address() as AddressInfo).port
         resolve()
       })
     })
 
     // Node does not include upgraded sockets in closeAllConnections(). The service
     // owns them with the other connections, so it tracks and destroys them explicitly.
-    const server = this.server
     this.ctx.effect(() => async () => {
       const serverClosed = new Promise<void>((resolve) => {
-        server.close(() => { resolve() })
+        this.server.close(() => { resolve() })
       })
-      server.closeAllConnections()
+      this.server.closeAllConnections()
       const upgradedClosed = [...this.upgradedSockets].map(socket => new Promise<void>((resolve) => {
         socket.once('close', () => { resolve() })
         socket.destroy()
@@ -338,17 +360,5 @@ export class WebServer extends Service {
     return this.applyIndexTaps(renderIndexInjections(html, this.collectIndexInjections()))
   }
 }
-
-export { serveStdio } from './stdio-carrier.ts'
-export {
-  LineBuffer,
-  decodeRequest,
-  encodeChunk,
-  encodeDestroy,
-  encodeEnd,
-  encodeHead,
-  type StdioRequestFrame,
-  type StdioResponseFrame,
-} from './stdio-frames.ts'
 
 export default WebServer

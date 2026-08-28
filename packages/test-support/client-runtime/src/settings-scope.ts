@@ -1,6 +1,8 @@
 /** Test double for the client settings-scope seam. */
 import { vi } from 'vitest'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type {
+  SettingsScope, SettingsScopeSnapshot,
+} from '@deepseek-ai/dsh-client-ui-settings/client'
 
 /** Handle over one stubbed scope: the scope, its write spy, and publication controls. */
 export interface StubSettingsScope<T> {
@@ -8,6 +10,8 @@ export interface StubSettingsScope<T> {
   scope: SettingsScope<T>
   /** Spy behind `scope.set`; resolves immediately. */
   set: ReturnType<typeof vi.fn>
+  /** Spy behind `scope.mutate`; resolves immediately. */
+  mutate: ReturnType<typeof vi.fn>
   /** Spy behind `scope.unset`; resolves immediately. */
   unset: ReturnType<typeof vi.fn>
   /** Spy behind `scope.setMany`; resolves immediately. */
@@ -34,6 +38,7 @@ export function stubSettingsScope<T>(): StubSettingsScope<T> {
   }
   const listeners = new Set<() => void>()
   const set = vi.fn(() => Promise.resolve())
+  const mutate = vi.fn(() => Promise.resolve())
   const unset = vi.fn(() => Promise.resolve())
   const setMany = vi.fn(() => Promise.resolve())
   return {
@@ -43,11 +48,13 @@ export function stubSettingsScope<T>(): StubSettingsScope<T> {
         listeners.add(listener)
         return () => { listeners.delete(listener) }
       },
+      mutate,
       set,
       unset,
       setMany,
     },
     set,
+    mutate,
     unset,
     setMany,
     listenerCount: () => listeners.size,

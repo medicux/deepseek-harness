@@ -10,7 +10,7 @@ import { launchWebScaffold, seedBlankSession, watchConsole, webSnapshotMode, typ
 import { captureStableAria, compareOrRefreshGolden } from './goldens.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/cold-blank-session', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/cold-blank-session', import.meta.url))
 const SIDEBAR_EXPECTED = join(SNAPSHOT_DIR, 'sidebar.expected.md')
 const MODE = webSnapshotMode()
 const SESSION_ID = 'cold-blank-session-web-e2e'
@@ -37,7 +37,7 @@ describe('web e2e: cold blank Session visibility', () => {
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
   }, 120_000)
 

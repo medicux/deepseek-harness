@@ -9,8 +9,8 @@ import { launchWebScaffold, seedSession, watchConsole, webSnapshotMode, type Web
 import { assertFixtureInventory, captureStableAria, compareOrRefreshGolden } from './goldens.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/markdown-inline-code-links', import.meta.url))
-const UI_EXPECTED = fileURLToPath(new URL('./snapshots/markdown-inline-code-links/ui.expected.md', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/markdown-inline-code-links', import.meta.url))
+const UI_EXPECTED = fileURLToPath(new URL('./expected/markdown-inline-code-links/ui.expected.md', import.meta.url))
 const MODE = webSnapshotMode()
 const SEED_ID = 'markdown-inline-code-links-web-e2e'
 const DONE = 'INLINE_CODE_LINK_DONE'
@@ -87,7 +87,7 @@ describe('web e2e: Markdown inline-code links', () => {
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
   }, 120_000)
 

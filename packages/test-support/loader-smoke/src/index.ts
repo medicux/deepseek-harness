@@ -22,34 +22,10 @@ export {
   type FixtureTurnResult,
 } from './agent-turn.ts'
 
-// A tsx-sourced boot of the full app compiles thousands of modules and idles
-// near 20s on its own; under a concurrent battery the SIGKILL deadline must
-// leave real headroom or load alone decides the outcome.
-const DEFAULT_PROCESS_TIMEOUT_MS = 60_000
+const DEFAULT_PROCESS_TIMEOUT_MS = 30_000
 
-/** Environment variable overriding {@link DEFAULT_PROCESS_TIMEOUT_MS} for constrained machines. */
-export const SMOKE_PROCESS_TIMEOUT_ENV = 'DSH_SMOKE_PROCESS_TIMEOUT_MS'
-
-/**
- * Resolve the SIGKILL deadline one smoke subprocess may take, preferring an explicit option over a
- * validated {@link SMOKE_PROCESS_TIMEOUT_ENV} entry over the measured default. CI machines slower
- * than the development baseline raise the environment variable instead of editing harness code;
- * every derived deadline ({@link LOADER_SMOKE_TEST_TIMEOUT_MS}) scales with the resolved value so
- * the vitest limit can never fire before the subprocess-owned one.
- * @param raw - the raw override value; defaults to `process.env[SMOKE_PROCESS_TIMEOUT_ENV]`.
- * @returns the subprocess deadline in milliseconds.
- */
-export function resolveSmokeProcessTimeoutMs(raw: string | undefined = process.env[SMOKE_PROCESS_TIMEOUT_ENV]): number {
-  if (raw === undefined || raw === '') return DEFAULT_PROCESS_TIMEOUT_MS
-  const value = Number(raw)
-  if (!Number.isInteger(value) || value < 1) {
-    throw new Error(`${SMOKE_PROCESS_TIMEOUT_ENV} must be a positive integer, got ${JSON.stringify(raw)}.`)
-  }
-  return value
-}
-
-/** Vitest deadline that leaves room above the resolved subprocess-owned diagnostic timeout. */
-export const LOADER_SMOKE_TEST_TIMEOUT_MS = resolveSmokeProcessTimeoutMs() + 15_000
+/** Vitest deadline that leaves room for the subprocess-owned 30-second diagnostic timeout. */
+export const LOADER_SMOKE_TEST_TIMEOUT_MS = DEFAULT_PROCESS_TIMEOUT_MS + 15_000
 
 /** Which artifact an example bin is booted from: unbuilt `src` via tsx, or built `lib` via plain Node. */
 export type ExampleMode = 'src' | 'lib'
@@ -89,6 +65,8 @@ export interface ExampleLaunchOptions {
   readonly mode?: ExampleMode
   /** Absolute repo tsconfig whose `paths` map resolves unbuilt workspace imports. Required in `src` mode, ignored in `lib`. */
   readonly tsconfigPath?: string
+  /** Select the ESM-only tsx hook instead of the generic loader. */
+  readonly sourceImport?: 'tsx/esm'
   /** Extra environment entries the mode-specific ones layer over; the caller then merges the result over `process.env`. */
   readonly env?: NodeJS.ProcessEnv
 }
@@ -137,7 +115,9 @@ export function resolveExampleLaunch(options: ExampleLaunchOptions): ExampleLaun
     if (options.tsconfigPath === undefined) {
       throw new Error("resolveExampleLaunch: 'src' mode needs tsconfigPath for the workspace paths map.")
     }
-    const tsxLoader = import.meta.resolve('tsx')
+    const tsxLoader = options.sourceImport === 'tsx/esm'
+      ? import.meta.resolve('tsx/esm')
+      : import.meta.resolve('tsx')
     env.TSX_TSCONFIG_PATH = options.tsconfigPath
     return { command: process.execPath, args: ['--import', tsxLoader, options.srcBin, ...configArgs], env }
   }
@@ -151,6 +131,8 @@ export interface LoaderSmokeOptions {
   readonly label: string
   /** Prefix for the isolated temporary process cwd. */
   readonly tempDirPrefix: string
+  /** Existing parent for the generated cwd; defaults to the platform temporary directory. */
+  readonly tempDirParent?: string
   /** Absolute app-bin source path (`<pkg>/src/bin.ts`); the `lib` bin is derived from it. */
   readonly binScript: string
   /** Explicit plain-Node entry for `lib` mode; intended for test fixtures outside a package `src/` tree. */
@@ -196,8 +178,8 @@ export interface LoaderSmokeResult {
  * @returns captured stdout and stderr after a zero exit.
  */
 export async function runLoaderSmoke(options: LoaderSmokeOptions): Promise<LoaderSmokeResult> {
-  const cwd = await mkdtemp(join(tmpdir(), options.tempDirPrefix))
-  const processTimeoutMs = options.processTimeoutMs ?? resolveSmokeProcessTimeoutMs()
+  const cwd = await mkdtemp(join(options.tempDirParent ?? tmpdir(), options.tempDirPrefix))
+  const processTimeoutMs = options.processTimeoutMs ?? DEFAULT_PROCESS_TIMEOUT_MS
   try {
     await options.prepare?.(cwd)
     const launch = resolveExampleLaunch({
