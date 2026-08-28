@@ -8,6 +8,7 @@ import {
   buildTopStripScript,
   buildWindowControlsScript,
   DRAG_REGION_CSS,
+  shouldOpenExternal,
   type WindowChromeTarget,
   TOP_STRIP_CSS,
   WINDOW_CONTROLS_CSS,
@@ -105,7 +106,7 @@ describe('TOP_STRIP_CSS', () => {
   it('adds an invisible full-width grab edge that hides in fullscreen', () => {
     expect(TOP_STRIP_CSS).toContain(`#${DESKTOP_TOP_STRIP_ID} {`)
     expect(TOP_STRIP_CSS).toContain('-webkit-app-region: drag;')
-    expect(TOP_STRIP_CSS).toContain('height: 32px;')
+    expect(TOP_STRIP_CSS).toContain('height: 30px;')
     expect(TOP_STRIP_CSS).toContain('pointer-events: none;')
     expect(TOP_STRIP_CSS).toContain('body:fullscreen')
   })
@@ -116,5 +117,23 @@ describe('buildTopStripScript', () => {
     const script = buildTopStripScript()
     expect(script).toContain(`getElementById('${DESKTOP_TOP_STRIP_ID}')`)
     expect(script).toContain(`'${DESKTOP_TOP_STRIP_ID}'`)
+  })
+})
+
+describe('shouldOpenExternal', () => {
+  it('hands ordinary web links to the system browser', () => {
+    expect(shouldOpenExternal('https://example.com/docs')).toBe(true)
+    expect(shouldOpenExternal('http://127.0.0.1:3000/x')).toBe(true)
+  })
+
+  it('rejects every scheme that is not plain http(s)', () => {
+    // A look-alike scheme must not reach the OS: startsWith('https') would
+    // have accepted this before the parse-based check.
+    expect(shouldOpenExternal('https-evil://example.com')).toBe(false)
+    expect(shouldOpenExternal('file:///etc/passwd')).toBe(false)
+    expect(shouldOpenExternal('dsh://app/')).toBe(false)
+    expect(shouldOpenExternal('javascript:alert(1)')).toBe(false)
+    expect(shouldOpenExternal('')).toBe(false)
+    expect(shouldOpenExternal('not a url')).toBe(false)
   })
 })

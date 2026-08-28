@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import { bindSnapshotSelector } from './bind.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
-import { StatusLiveRegion, type StatusAnnounceService } from './StatusLiveRegion.tsx'
+import { StatusLiveRegion } from './StatusLiveRegion.tsx'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 
 /** Inputs available after the UI renderer's inject set activates. */
@@ -27,7 +27,7 @@ export function buildRenderApp(deps: AssemblyDeps): () => ReactNode {
   // The announcer is optional: tests that assemble a partial runtime do not
   // need the live region, and the product path always provides it from the
   // renderer's `apply` hook.
-  const announcer = ctx.get('statusAnnounce') as StatusAnnounceService | undefined
+  const announcer = ctx.get('statusAnnounce')
   const useSessions = bindSnapshotSelector(sessions.list)
   const SessionDocumentTitle = (): ReactNode => {
     const title = useSessions((state) => {

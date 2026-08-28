@@ -19,6 +19,8 @@ import { extractReadyUrl, hasStdioReadyLine } from './readiness.ts'
 const DEFAULT_READY_TIMEOUT_MS = 120_000
 /** Default SIGTERM→SIGKILL escalation delay in {@link DshServerProcess.stop}. */
 const DEFAULT_KILL_GRACE_MS = 5_000
+/** Hard ceiling on how long stop() waits after SIGKILL before giving up. */
+const SIGKILL_REAP_TIMEOUT_MS = 2_000
 /** Upper bound on stdout retained for readiness scanning; boot logs cannot reach this. */
 const MAX_CAPTURE_CHARS = 1 << 20
 /** Lines of combined output kept for failure diagnostics. */
@@ -250,26 +252,31 @@ export class DshServerProcess {
     child.kill('SIGTERM')
     if (!(await this.#exitWithin(this.#options.killGraceMs ?? DEFAULT_KILL_GRACE_MS))) {
       child.kill('SIGKILL')
-      await this.#exitWithin(undefined)
+      // SIGKILL's reap is bounded too: a child stuck in an uninterruptible
+      // kernel wait would otherwise hang stop() — and with it app.quit() —
+      // forever. Give up on reaping instead of trapping the shell.
+      await this.#exitWithin(SIGKILL_REAP_TIMEOUT_MS)
     }
   }
 
   /**
    * Resolve when the current child exits; resolve `false` on timeout so the
    * caller can escalate instead of treating a slow dispose as a hang forever.
-   * @param ms - the wait budget; `undefined` waits indefinitely (SIGKILL has no next escalation).
+   * Every call is bounded: teardown is the last thing the shell does, and an
+   * unbounded wait there would strand app.quit().
+   * @param ms - the wait budget in milliseconds.
    */
-  #exitWithin(ms: number | undefined): Promise<boolean> {
+  #exitWithin(ms: number): Promise<boolean> {
     const child = this.#child
     if (child === undefined) return Promise.resolve(true)
     if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true)
     return new Promise<boolean>((resolve) => {
-      const timer = ms === undefined ? undefined : setTimeout(() => {
+      const timer = setTimeout(() => {
         child.off('exit', onExit)
         resolve(false)
       }, ms)
       function onExit(): void {
-        if (timer !== undefined) clearTimeout(timer)
+        clearTimeout(timer)
         resolve(true)
       }
       child.once('exit', onExit)

@@ -77,7 +77,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
     <div className={css.overlay} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
       <div className={css.panel} role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid="settings-dialog">
-        <nav className={css.nav} role="tablist" aria-label={String(renderSlot('settings.header', {}) ?? '')}>
+        <nav className={css.nav} role="tablist" aria-label="Settings">
           <div className={css.navTitle} id={titleId}>{renderSlot('settings.header', {})}</div>
           <div className={css.navList}>
             {rows.map(row => (

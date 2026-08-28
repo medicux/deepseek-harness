@@ -40,6 +40,7 @@ import {
   applyWindowOp,
   buildTopStripScript,
   buildWindowControlsScript,
+  shouldOpenExternal,
 } from './window-chrome.ts'
 import { registerDesktopCarrier, resetDesktopCarrier } from './carrier.ts'
 import { DESKTOP_APP_URL, installDesktopProtocol, registerDesktopScheme, resetDesktopProtocol } from './protocol.ts'
@@ -211,16 +212,32 @@ function createWindow(): void {
     // Frameless-but-native: content flush to the top, traffic lights floating
     // over the sidebar's brand row on macOS, no bar anywhere.
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    webPreferences: { preload: PRELOAD_PATH },
+    // Explicit security posture: the preload runs sandboxed with context
+    // isolation, and the renderer gets no Node surface. Pin every field — a
+    // future Electron default change must not silently widen the attack
+    // surface of a privileged app-origin renderer.
+    webPreferences: {
+      preload: PRELOAD_PATH,
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+    },
   })
   window.once('ready-to-show', () => { window?.show() })
   // The web client is a single-page application served by the supervised
-  // origin: navigation away and popups are never product flows. External
-  // http(s) links open in the system browser instead.
+  // origin: popups and navigation away are never product flows. External
+  // http(s) links open in the system browser instead, and every other
+  // scheme is dropped rather than handed an authority.
   window.webContents.setWindowOpenHandler(({ url: target }) => {
-    if (target.startsWith('https://') || target.startsWith('http://')) void shell.openExternal(target)
+    if (shouldOpenExternal(target)) void shell.openExternal(target)
     return { action: 'deny' }
   })
+  // The web client is a single-page application: its route changes use
+  // history.pushState, which never fires a top-level navigation. Any
+  // will-navigate is a real document load the SPA never requests, so block it
+  // unconditionally — the dsh://app origin must not be full-reloadable by
+  // page script, and a foreign scheme must not steer the window either.
   window.webContents.on('will-navigate', (event) => { event.preventDefault() })
   // The product title stays the shell's: the served page's <title> must not
   // rename the window (dock, mission control, dialog wording).
